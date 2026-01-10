@@ -1,6 +1,6 @@
 <template>
   <div class="upload-pane">
-    <h3>New Import</h3>
+    <h4>New Import</h4>
     <div class="file-inputs">
       <label>
         .cfg:
@@ -46,8 +46,8 @@ async function handleUpload() {
     cfgFile.value = null
     datFile.value = null
     // Reset file inputs visually if needed, simplistic here
-  } catch (e: any) {
-    error.value = e.message || 'Upload failed'
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : 'Upload failed'
   }
 }
 </script>

@@ -14,8 +14,8 @@ export const useDatasetStore = defineStore('dataset', {
       this.loading = true
       try {
         this.datasets = await listDatasets()
-      } catch (e: any) {
-        this.error = e?.message ?? String(e)
+      } catch (e: unknown) {
+        this.error = e instanceof Error ? e.message : String(e)
       } finally {
         this.loading = false
       }
@@ -34,8 +34,8 @@ export const useDatasetStore = defineStore('dataset', {
       try {
         this.metadata = await getMetadata(id)
         this.currentId = id
-      } catch (e: any) {
-        this.error = e?.message ?? String(e)
+      } catch (e: unknown) {
+        this.error = e instanceof Error ? e.message : String(e)
       } finally {
         this.loading = false
       }

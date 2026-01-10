@@ -1,6 +1,6 @@
 <template>
   <div class="dataset-list">
-    <h3>Datasets</h3>
+    <h4>Datasets</h4>
     <div v-if="datasetStore.loading && !datasetStore.datasets.length">Loading...</div>
     <ul v-else>
       <li
@@ -15,7 +15,7 @@
     </ul>
 
     <div v-if="datasetStore.metadata" class="channels">
-      <h4>Channels</h4>
+      <h5>Channels</h5>
       <div class="channel-list">
         <label v-for="ch in datasetStore.metadata.channels" :key="ch.id" class="channel-item">
           <input
@@ -59,6 +59,10 @@ function formatSize(bytes: number) {
 </script>
 
 <style scoped>
+.dataset-list {
+  display: flex;
+  flex-direction: column;
+}
 .dataset-list ul {
   list-style: none;
   padding: 0;
@@ -86,14 +90,18 @@ li.active {
   color: #888;
 }
 .channels {
-  margin-top: 15px;
+  margin-top: 0px;
   border-top: 1px solid #eee;
-  pt: 10px;
+  overflow: hidden;
 }
 .channel-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 90%;
 }
 .channel-item {
   font-size: 12px;
