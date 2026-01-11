@@ -4,7 +4,7 @@ export const api = axios.create({ baseURL: '/api' })
 
 export type DatasetInfo = { datasetId: string; name: string; createdAt: number; sizeBytes: number }
 export type AnalogChannelMeta = {
-  id: string
+  id: number
   name: string
   phase: string
   ccbm: string
@@ -19,7 +19,7 @@ export type AnalogChannelMeta = {
   ps: string
 }
 export type DigitalChannelMeta = {
-  id: string
+  id: number
   name: string
   phase: string
   ccbm: string

@@ -2,8 +2,8 @@ import { defineStore } from 'pinia'
 
 export const useViewStore = defineStore('view', {
   state: () => ({
-    selectedAnalogChannels: [] as string[],
-    selectedDigitalChannels: [] as string[],
+    selectedAnalogChannels: [] as number[],
+    selectedDigitalChannels: [] as number[],
     startMs: 0,
     endMs: 500,
   }),
@@ -12,20 +12,20 @@ export const useViewStore = defineStore('view', {
       this.startMs = start
       this.endMs = end
     },
-    toggleAnalogChannel(id: string) {
+    toggleAnalogChannel(id: number) {
       const idx = this.selectedAnalogChannels.indexOf(id)
       if (idx >= 0) this.selectedAnalogChannels.splice(idx, 1)
       else this.selectedAnalogChannels.push(id)
     },
-    setAnalogChannels(ids: string[]) {
+    setAnalogChannels(ids: number[]) {
       this.selectedAnalogChannels = ids
     },
-    toggleDigitalChannel(id: string) {
+    toggleDigitalChannel(id: number) {
       const idx = this.selectedDigitalChannels.indexOf(id)
       if (idx >= 0) this.selectedDigitalChannels.splice(idx, 1)
       else this.selectedDigitalChannels.push(id)
     },
-    setDigitalChannels(ids: string[]) {
+    setDigitalChannels(ids: number[]) {
       this.selectedDigitalChannels = ids
     },
   },

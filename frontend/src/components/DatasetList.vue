@@ -15,9 +15,12 @@
     </ul>
 
     <div v-if="datasetStore.metadata" class="channels">
-      <h5>Analog Channels</h5>
+      <div class="channel-header">
+        <div>Analog Channels ({{ datasetStore.metadata.analogChannelNum }})</div>
+        <input v-model="analogFilter" type="text" placeholder="Filter..." class="filter-input" />
+      </div>
       <div class="channel-list">
-        <label v-for="ch in datasetStore.metadata.analogChannels" :key="ch.id" class="channel-item">
+        <label v-for="ch in filteredAnalogChannels" :key="ch.id" class="channel-item">
           <input
             type="checkbox"
             :checked="viewStore.selectedAnalogChannels.includes(ch.id)"
@@ -27,13 +30,12 @@
           <span class="unit"> {{ ch.unit }} </span>
         </label>
       </div>
-      <h5>Digital Channels</h5>
+      <div class="channel-header">
+        <div>Digital Channels ({{ datasetStore.metadata.digitalChannelNum }})</div>
+        <input v-model="digitalFilter" type="text" placeholder="Filter..." class="filter-input" />
+      </div>
       <div class="channel-list">
-        <label
-          v-for="ch in datasetStore.metadata.digitalChannels"
-          :key="ch.id"
-          class="channel-item"
-        >
+        <label v-for="ch in filteredDigitalChannels" :key="ch.id" class="channel-item">
           <input
             type="checkbox"
             :checked="viewStore.selectedDigitalChannels.includes(ch.id)"
@@ -47,20 +49,42 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useDatasetStore } from '../stores/dataset'
 import { useViewStore } from '../stores/view'
 
 const datasetStore = useDatasetStore()
 const viewStore = useViewStore()
+const analogFilter = ref('')
+const digitalFilter = ref('')
 
 onMounted(() => {
   datasetStore.refreshList()
 })
 
+const filteredAnalogChannels = computed(() => {
+  const channels = datasetStore.metadata?.analogChannels || []
+  console.log('Filtering analog channels with filter:', analogFilter.value)
+  if (!analogFilter.value) return channels
+  return channels.filter(
+    (ch) =>
+      ch.name.toLowerCase().includes(analogFilter.value.toLowerCase()) ||
+      ch.id.toString().toLowerCase().includes(analogFilter.value.toLowerCase()),
+  )
+})
+
+const filteredDigitalChannels = computed(() => {
+  const channels = datasetStore.metadata?.digitalChannels || []
+  if (!digitalFilter.value) return channels
+  return channels.filter(
+    (ch) =>
+      ch.name.toLowerCase().includes(digitalFilter.value.toLowerCase()) ||
+      ch.id.toString().toLowerCase().includes(digitalFilter.value.toLowerCase()),
+  )
+})
+
 async function select(id: string) {
   await datasetStore.loadMetadata(id)
-  // Auto-select first few channels if none selected
   if (datasetStore.metadata && viewStore.selectedAnalogChannels.length === 0) {
     const defaults = datasetStore.metadata.analogChannels.slice(0, 3).map((c) => c.id)
     viewStore.setAnalogChannels(defaults)
@@ -111,6 +135,27 @@ li.active {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+.channel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  font-weight: 500;
+  font-size: 13px;
+  border-bottom: 1px solid #eee;
+}
+.filter-input {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  outline: none;
+}
+.filter-input:focus {
+  border-color: #1976d2;
 }
 .channel-list {
   display: flex;
