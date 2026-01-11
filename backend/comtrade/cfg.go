@@ -106,9 +106,13 @@ func parseStationLine(parser *cfgParser, line string) error {
 	}
 	parser.cfg.Station = parts[0]
 	parser.cfg.Relay = parts[1]
-	parser.cfg.Version = parts[2]
+	if len(parts) > 2 {
+		parser.cfg.Version = parts[2]
+	} else {
+		parser.cfg.Version = "1991" // no version specified, assume 1991
+	}
 	switch parser.cfg.Version {
-	case "1999":
+	case "1991", "1999", "2013":
 		parser.status = 1
 		parser.actions = append(parser.actions,
 			parseChannelCountLine,
@@ -353,7 +357,7 @@ func parseDataFileTypeLine(parser *cfgParser, line string) error {
 	if len(parts) < 1 {
 		return fmt.Errorf("invalid DATA FILE TYPE line: %s", line)
 	}
-	parser.cfg.DataFileType = parts[0]
+	parser.cfg.DataFileType = strings.ToLower(parts[0])
 	parser.status++
 	return nil
 }

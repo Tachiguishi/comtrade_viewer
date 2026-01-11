@@ -23,7 +23,7 @@
         <label v-for="ch in filteredAnalogChannels" :key="ch.id" class="channel-item">
           <input
             type="checkbox"
-            :checked="viewStore.selectedAnalogChannels.includes(ch.id)"
+            :checked="viewStore.selectedAnalogChannels.includes('A' + ch.id.toString())"
             @change="() => viewStore.toggleAnalogChannel(ch.id)"
           />
           <span class="analog">{{ ch.id + '.' + ch.name }}</span>
@@ -38,7 +38,7 @@
         <label v-for="ch in filteredDigitalChannels" :key="ch.id" class="channel-item">
           <input
             type="checkbox"
-            :checked="viewStore.selectedDigitalChannels.includes(ch.id)"
+            :checked="viewStore.selectedDigitalChannels.includes('D' + ch.id.toString())"
             @change="() => viewStore.toggleDigitalChannel(ch.id)"
           />
           <span class="digital">{{ ch.id + '.' + ch.name }}</span>

@@ -104,10 +104,12 @@ func main() {
 			return
 		}
 		meta, dat, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
-		if err == nil {
-			_ = writeJSON(filepath.Join(dp, "meta.json"), meta)
-			_ = writeJSON(filepath.Join(dp, "data.json"), dat)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "parse error: " + err.Error()})
+			return
 		}
+		_ = writeJSON(filepath.Join(dp, "meta.json"), meta)
+		_ = writeJSON(filepath.Join(dp, "data.json"), dat)
 		c.JSON(http.StatusOK, gin.H{"datasetId": datasetID, "name": datasetID})
 	})
 
@@ -140,35 +142,137 @@ func main() {
 		c.JSON(http.StatusNotFound, gin.H{"error": "metadata not found"})
 	})
 
-	// Waveforms (placeholder synthetic)
+	// Waveforms (real data from parsed ComTrade)
 	r.GET("/api/datasets/:id/waveforms", func(c *gin.Context) {
-		chs := strings.Split(c.Query("channels"), ",")
-		startMs, _ := strconv.ParseFloat(c.Query("start"), 64)
-		endMs, _ := strconv.ParseFloat(c.Query("end"), 64)
-		if endMs <= startMs {
-			endMs = startMs + 500
+		id := c.Param("id")
+		dp := filepath.Join(dataRoot, id)
+		
+		// Load parsed data
+		var meta comtrade.Metadata
+		var dat comtrade.ChannelData
+		
+		metaPath := filepath.Join(dp, "meta.json")
+		dataPath := filepath.Join(dp, "data.json")
+		
+		// Try to load from cache first
+		if b, err := os.ReadFile(metaPath); err == nil {
+			json.Unmarshal(b, &meta)
 		}
-		points := 2000
+		if b, err := os.ReadFile(dataPath); err == nil {
+			json.Unmarshal(b, &dat)
+		}
+		
+		// If cache doesn't exist, parse now
+		if len(dat.Timestamps) == 0 {
+			m, d, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse ComTrade: " + err.Error()})
+				return
+			}
+			meta = *m
+			dat = *d
+		}
+		
+		// Parse requested channels
+		chsStr := c.Query("channels")
+		if chsStr == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "channels parameter required"})
+			return
+		}
+		chs := strings.Split(chsStr, ",")
+		
+		// Build series response
 		series := make([]map[string]any, 0, len(chs))
-		// Synthetic sine for demo
-		dur := endMs - startMs
-		for i, ch := range chs {
-			if ch == "" {
+		
+		// Calculate sampling rate for time axis
+		sampleRate := 1000.0 // default
+		if len(meta.SampleRates) > 0 {
+			sampleRate = meta.SampleRates[0].SampRate
+		}
+		timeStep := 1.0 / sampleRate
+		
+		for _, chID := range chs {
+			chID = strings.TrimSpace(chID)
+			if chID == "" {
 				continue
 			}
-			t := make([]float64, points)
-			y := make([]float64, points)
-			for k := 0; k < points; k++ {
-				tt := startMs + (dur*float64(k))/float64(points-1)
-				t[k] = tt / 1000.0
-				y[k] = 0.5 * float64(i+1) *
-					(0.8*mathSin(2*3.14159*(0.01*tt)) + 0.2*mathSin(2*3.14159*(0.002*tt)))
+			
+			// Check if it's analog (A1, A2, etc) or digital (D1, D2, etc)
+			if strings.HasPrefix(chID, "A") {
+				// Analog channel
+				chNum, err := strconv.Atoi(strings.TrimPrefix(chID, "A"))
+				if err != nil {
+					continue
+				}
+				
+				// Find the channel data
+				for _, chData := range dat.AnalogChannels {
+					if chData.ChannelNumber == chNum {
+						t := make([]float64, len(chData.RawDataFloat))
+						y := make([]float64, len(chData.RawDataFloat))
+						
+						// Get scaling factors from metadata
+						var multiplier, offset float64 = 1.0, 0.0
+						if chNum-1 < len(meta.AnalogChannels) {
+							ch := meta.AnalogChannels[chNum-1]
+							multiplier = ch.Multiplier
+							offset = ch.Offset
+						}
+						
+						for i, d := range chData.RawDataFloat {
+							t[i] = float64(i) * timeStep
+							// Apply scaling: physical_value = raw * multiplier + offset
+							y[i] = float64(d)*multiplier + offset
+						}
+						
+						series = append(series, map[string]any{
+							"channelId": chID,
+							"t":         t,
+							"y":         y,
+						})
+						break
+					}
+				}
+			} else if strings.HasPrefix(chID, "D") {
+				// Digital channel
+				chNum, err := strconv.Atoi(strings.TrimPrefix(chID, "D"))
+				if err != nil {
+					continue
+				}
+				
+				for _, chData := range dat.DigitalChannels {
+					if chData.ChannelNumber == chNum {
+						t := make([]float64, len(chData.RawData))
+						y := make([]int8, len(chData.RawData))
+						
+						for i, d := range chData.RawData {
+							t[i] = float64(i) * timeStep
+							y[i] = d
+						}
+						
+						series = append(series, map[string]any{
+							"channelId": chID,
+							"t":         t,
+							"y":         y,
+						})
+						break
+					}
+				}
 			}
-			series = append(series, map[string]any{"channelId": ch, "t": t, "y": y})
 		}
+		
+		// Calculate window
+		var startTime, endTime float64
+		if len(series) > 0 {
+			if tArr, ok := series[0]["t"].([]float64); ok && len(tArr) > 0 {
+				startTime = tArr[0]
+				endTime = tArr[len(tArr)-1]
+			}
+		}
+		
 		c.JSON(http.StatusOK, gin.H{
 			"series": series,
-			"window": map[string]float64{"start": startMs / 1000.0, "end": endMs / 1000.0},
+			"window": map[string]float64{"start": startTime, "end": endTime},
 		})
 	})
 

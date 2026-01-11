@@ -29,7 +29,7 @@ func findFileCaseInsensitive(directory, base, ext string) (string, error) {
 	return "", fmt.Errorf("file not found (case-insensitive): %s", candidate)
 }
 
-func ParseComtrade(cfgPath string, datPath string) (*Metadata, *DAT, error) {
+func ParseComtrade(cfgPath string, datPath string) (*Metadata, *ChannelData, error) {
 	cfgFile, err := os.Open(cfgPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open CFG file: %w", err)
