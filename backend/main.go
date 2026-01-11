@@ -11,31 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"comtradeviewer/comtrade"
+
 	"github.com/gin-gonic/gin"
 )
-
-type ChannelMeta struct {
-	ID    string  `json:"id"`
-	Name  string  `json:"name"`
-	Type  string  `json:"type"` // analog | digital
-	Unit  *string `json:"unit"`
-	Scale *struct {
-		K float64 `json:"k"`
-		B float64 `json:"b"`
-	} `json:"scale"`
-}
-
-type Metadata struct {
-	Station   string         `json:"station"`
-	Recording map[string]any `json:"recording"`
-	Sampling  struct {
-		Rate float64 `json:"rate"`
-	} `json:"sampling"`
-	Channels  []ChannelMeta `json:"channels"`
-	Timebase  float64       `json:"timebase"`
-	StartTime int64         `json:"startTime"`
-	EndTime   int64         `json:"endTime"`
-}
 
 type DatasetInfo struct {
 	DatasetID string `json:"datasetId"`
@@ -67,93 +46,6 @@ func saveUploadedFile(fh *multipart.Form, field string, dest string) error {
 
 	_, err = io.Copy(dst, src)
 	return err
-}
-
-func parseCfgMinimal(cfgPath string) (Metadata, error) {
-	// Minimal, robust-ish parser for common ComTrade .cfg layout.
-	// Fallbacks are used when fields are missing.
-	var meta Metadata
-	meta.Recording = map[string]any{}
-	meta.Timebase = 1e-6
-	meta.StartTime = time.Now().UnixMilli()
-	meta.EndTime = meta.StartTime
-
-	b, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return meta, err
-	}
-	lines := strings.Split(string(b), "\n")
-	// Typical: first line station,device,id
-	if len(lines) > 0 {
-		parts := strings.Split(lines[0], ",")
-		if len(parts) > 0 {
-			meta.Station = strings.TrimSpace(parts[0])
-		}
-		if len(parts) > 1 {
-			meta.Recording["device"] = strings.TrimSpace(parts[1])
-		}
-	}
-	// Channel counts line e.g. "nA,nD"
-	var nA, nD int
-	if len(lines) > 1 {
-		parts := strings.Split(lines[1], ",")
-		if len(parts) >= 2 {
-			nA, _ = strconv.Atoi(strings.TrimSpace(parts[0]))
-			nD, _ = strconv.Atoi(strings.TrimSpace(parts[1]))
-		}
-	}
-	// Read analog channel names (heuristic)
-	idx := 2
-	for i := 0; i < nA && idx < len(lines); i++ {
-		line := strings.TrimSpace(lines[idx])
-		idx++
-		if line == "" {
-			continue
-		}
-		ps := strings.Split(line, ",")
-		name := ps[0]
-		ch := ChannelMeta{ID: "A" + strconv.Itoa(i+1), Name: strings.TrimSpace(name), Type: "analog"}
-		meta.Channels = append(meta.Channels, ch)
-	}
-	for i := 0; i < nD && idx < len(lines); i++ {
-		line := strings.TrimSpace(lines[idx])
-		idx++
-		if line == "" {
-			continue
-		}
-		ps := strings.Split(line, ",")
-		name := ps[0]
-		ch := ChannelMeta{ID: "D" + strconv.Itoa(i+1), Name: strings.TrimSpace(name), Type: "digital"}
-		meta.Channels = append(meta.Channels, ch)
-	}
-	// Sampling rate line (heuristic)
-	for _, l := range lines[idx:] {
-		l = strings.TrimSpace(l)
-		if l == "" {
-			continue
-		}
-		if strings.Contains(l, ",") {
-			ps := strings.Split(l, ",")
-			if len(ps) >= 2 {
-				if v, err := strconv.ParseFloat(strings.TrimSpace(ps[0]), 64); err == nil && v > 0 {
-					meta.Sampling.Rate = v
-					break
-				}
-			}
-		}
-	}
-	if meta.Sampling.Rate == 0 {
-		meta.Sampling.Rate = 1000
-	}
-	return meta, nil
-}
-
-func writeJSON(path string, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0o644)
 }
 
 func listDatasets(root string) ([]DatasetInfo, error) {
@@ -211,9 +103,10 @@ func main() {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "dat file required"})
 			return
 		}
-		meta, err := parseCfgMinimal(filepath.Join(dp, "cfg"))
+		meta, dat, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
 		if err == nil {
 			_ = writeJSON(filepath.Join(dp, "meta.json"), meta)
+			_ = writeJSON(filepath.Join(dp, "data.json"), dat)
 		}
 		c.JSON(http.StatusOK, gin.H{"datasetId": datasetID, "name": datasetID})
 	})
@@ -233,14 +126,14 @@ func main() {
 		id := c.Param("id")
 		dp := filepath.Join(dataRoot, id)
 		mp := filepath.Join(dp, "meta.json")
-		var meta Metadata
+		var meta comtrade.Metadata
 		if b, err := os.ReadFile(mp); err == nil {
 			if err := json.Unmarshal(b, &meta); err == nil {
 				c.JSON(http.StatusOK, meta)
 				return
 			}
 		}
-		if m, err := parseCfgMinimal(filepath.Join(dp, "cfg")); err == nil {
+		if m, _, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat")); err == nil {
 			c.JSON(http.StatusOK, m)
 			return
 		}
@@ -333,6 +226,14 @@ func main() {
 	})
 
 	r.Run(":8080")
+}
+
+func writeJSON(path string, v any) error {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o644)
 }
 
 func mathSin(x float64) float64 { // small inline to avoid extra imports

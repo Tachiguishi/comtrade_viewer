@@ -3,20 +3,44 @@ import axios from 'axios'
 export const api = axios.create({ baseURL: '/api' })
 
 export type DatasetInfo = { datasetId: string; name: string; createdAt: number; sizeBytes: number }
-export type ChannelMeta = {
+export type AnalogChannelMeta = {
   id: string
   name: string
-  type: 'analog' | 'digital'
-  unit?: string | null
+  phase: string
+  ccbm: string
+  unit: string
+  multiplier: number
+  offset: number
+  skew: number
+  minValue: number
+  maxValue: number
+  primary: number
+  secondary: number
+  ps: string
+}
+export type DigitalChannelMeta = {
+  id: string
+  name: string
+  phase: string
+  ccbm: string
+  y: number
 }
 export type Metadata = {
   station: string
-  recording: Record<string, any>
-  sampling: { rate: number }
-  channels: ChannelMeta[]
-  timebase: number
+  relay: string
+  version: string
+  totalChannelNum: number
+  analogChannelNum: number
+  digitalChannelNum: number
+  analogChannels: AnalogChannelMeta[]
+  digitalChannels: DigitalChannelMeta[]
+  frequency: number
+  ratesName: number
+  sampleRates: { sampRate: number; lastSampleNum: number }[]
   startTime: number
   endTime: number
+  dataFileType: string
+  timeMultiplier: number
 }
 
 export async function listDatasets() {

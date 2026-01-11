@@ -41,7 +41,11 @@ function resizeChart() {
 
 // Watchers to trigger update
 watch(
-  [() => datasetStore.currentId, () => viewStore.selectedChannels],
+  [
+    () => datasetStore.currentId,
+    () => viewStore.selectedAnalogChannels,
+    () => viewStore.selectedDigitalChannels,
+  ],
   () => {
     refreshData()
   },
@@ -53,7 +57,11 @@ watch(
 // Or we implement chart zoom event handling to update store
 
 async function refreshData() {
-  if (!datasetStore.currentId || viewStore.selectedChannels.length === 0) {
+  if (
+    !datasetStore.currentId ||
+    (viewStore.selectedAnalogChannels.length === 0 &&
+      viewStore.selectedDigitalChannels.length === 0)
+  ) {
     chartInstance.value?.clear()
     return
   }
@@ -62,7 +70,7 @@ async function refreshData() {
   try {
     const data = await getWaveforms(
       datasetStore.currentId,
-      viewStore.selectedChannels,
+      [...viewStore.selectedAnalogChannels, ...viewStore.selectedDigitalChannels],
       viewStore.startMs,
       viewStore.endMs,
     )
