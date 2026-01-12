@@ -235,6 +235,7 @@ func main() {
 						series = append(series, map[string]any{
 							"channel": chID,
 							"name":    meta.AnalogChannels[chNum-1].ChannelName,
+							"unit":    meta.AnalogChannels[chNum-1].Unit,
 							"y":       y,
 						})
 						break

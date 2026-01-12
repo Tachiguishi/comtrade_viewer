@@ -77,35 +77,100 @@ async function refreshData() {
       ...viewStore.selectedDigitalChannels,
     ])
 
+    const seriesCount = data.series.length
+    const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
+
+    // 预留顶部/底部空间给标题/缩放器，按百分比垂直堆叠各 grid
+    const plotAreaPct = 95 // 95% 高度作为绘图区
+    const topMarginPct = 4
+    const perGridPct = plotAreaPct / Math.max(seriesCount, 1)
+    const LEFT_MARGIN_PX = 60
+    const RIGHT_MARGIN_PX = 30
+    const grids = data.series.map((_, i) => ({
+      left: LEFT_MARGIN_PX,
+      right: RIGHT_MARGIN_PX,
+      top: `${topMarginPct + i * perGridPct}%`,
+      height: `${perGridPct - 4}%`,
+    }))
+
+    const xAxes = data.series.map((_, i) => ({
+      min: data.window.start,
+      max: data.window.end,
+      gridIndex: i,
+      name: '',
+      axisLabel: { show: i === seriesCount - 1 },
+      axisTick: { show: false },
+      axisLine: { show: false },
+      splitLine: { show: true },
+    }))
+
+    const yAxes = data.series.map((s, i) => ({
+      scale: true,
+      gridIndex: i,
+      name: s.unit ? `${s.name} (${s.unit})` : s.name,
+      nameTextStyle: {
+        align: 'left' as const,
+        padding: [0, 0, 0, -LEFT_MARGIN_PX],
+      },
+      axisLabel: {
+        show: true,
+        // formatter: s.unit ? `{value} ${s.unit}` : '{value}',
+      },
+      splitLine: { show: true },
+    }))
+
+    // 获取图表容器宽度
+    const DEFAULT_CHART_WIDTH = 800
+    const chartWidth = chartRef.value?.clientWidth || DEFAULT_CHART_WIDTH
+
+    // 为每个子图添加底部边框线
+    const graphicElements = data.series.flatMap((_, i) => {
+      const bottomY = `${topMarginPct + (i + 1) * perGridPct - 4}%`
+
+      return [
+        {
+          type: 'line',
+          right: RIGHT_MARGIN_PX,
+          top: bottomY,
+          shape: {
+            x1: 0,
+            y1: 0,
+            x2: chartWidth - RIGHT_MARGIN_PX,
+            y2: 0,
+          },
+          style: {
+            stroke: '#aaa',
+            lineWidth: 1,
+          },
+          z: 0,
+        },
+      ]
+    })
+
     const option: echarts.EChartsOption = {
-      tooltip: { trigger: 'axis' },
-      legend: { data: data.series.map((s) => s.name), bottom: 0 },
-      grid: { left: 50, right: 30, top: 20, bottom: 60, containLabel: true },
-      xAxis: {
-        type: 'value',
-        min: data.window.start,
-        max: data.window.end,
-        name: 'Time (s)',
-      },
-      yAxis: {
-        type: 'value',
-        scale: true,
-      },
-      series: data.series.map((s) => ({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+      grid: grids,
+      xAxis: xAxes,
+      yAxis: yAxes,
+      graphic: graphicElements,
+      series: data.series.map((s, i) => ({
         name: s.name,
         type: 'line',
         showSymbol: false,
-        data: s.y.map((y, i) => [data.times[i], y]),
-        animation: false, // Performance
+        xAxisIndex: i,
+        yAxisIndex: i,
+        data: s.y.map((y, k) => [data.times[k], y]),
+        animation: false,
       })),
       dataZoom: [
         {
           type: 'inside',
-          xAxisIndex: 0,
+          xAxisIndex: axesIndices,
         },
         {
           type: 'slider',
-          xAxisIndex: 0,
+          xAxisIndex: axesIndices,
+          bottom: 0,
         },
       ],
     }
