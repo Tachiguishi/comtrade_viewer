@@ -66,7 +66,8 @@ export async function getWaveforms(id: string, channels: string[]) {
   })
   const { data } = await api.get(`/datasets/${id}/waveforms`, { params })
   return data as {
-    series: { channel: string; name: string; t: number[]; y: number[] }[]
+    series: { channel: string; name: string; y: number[] }[]
+    times: number[]
     window: { start: number; end: number }
   }
 }

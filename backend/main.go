@@ -172,6 +172,11 @@ func main() {
 			meta = *m
 			dat = *d
 		}
+
+		if len(dat.Timestamps) == 0 {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "no channel data"})
+			return
+		}
 		
 		// Parse requested channels
 		chsStr := c.Query("channels")
@@ -183,14 +188,8 @@ func main() {
 		
 		// Build series response
 		series := make([]map[string]any, 0, len(chs))
-		
-		// // Calculate sampling rate for time axis
-		// sampleRate := 1000.0 // default
-		// if len(meta.SampleRates) > 0 {
-		// 	sampleRate = meta.SampleRates[0].SampRate
-		// }
-		// timeStep := 1.0 / sampleRate
-		
+		timestamps := comtrade.ComputeTimeAxisFromMeta(meta, dat.Timestamps, len(dat.Timestamps))
+
 		for _, chID := range chs {
 			chID = strings.TrimSpace(chID)
 			if chID == "" {
@@ -209,7 +208,6 @@ func main() {
 				for _, chData := range dat.AnalogChannels {
 					if chData.ChannelNumber == chNum {
 						sampleLen := max(len(chData.RawData), len(chData.RawDataFloat))
-						t := make([]float64, sampleLen)
 						y := make([]float64, sampleLen)
 						
 						// Get scaling factors from metadata
@@ -223,14 +221,12 @@ func main() {
 						if len(chData.RawDataFloat) == sampleLen {
 							// Use float data if available
 							for i, d := range chData.RawDataFloat {
-								t[i] = float64(dat.Timestamps[i])
 								// Apply scaling: physical_value = raw * multiplier + offset
 								y[i] = float64(d)*multiplier + offset
 							}
 						} else  {
 							// Fallback to int data
 							for i, d := range chData.RawData {
-								t[i] = float64(dat.Timestamps[i])
 								// Apply scaling: physical_value = raw * multiplier + offset
 								y[i] = float64(d)*multiplier + offset
 							}
@@ -239,8 +235,7 @@ func main() {
 						series = append(series, map[string]any{
 							"channel": chID,
 							"name":    meta.AnalogChannels[chNum-1].ChannelName,
-							"t":         t,
-							"y":         y,
+							"y":       y,
 						})
 						break
 					}
@@ -254,19 +249,15 @@ func main() {
 				
 				for _, chData := range dat.DigitalChannels {
 					if chData.ChannelNumber == chNum {
-						t := make([]float64, len(chData.RawData))
-						y := make([]int8, len(chData.RawData))
-						
-						for i, d := range chData.RawData {
-							t[i] = float64(dat.Timestamps[i])
-							y[i] = d
-						}
+						sampleLen := len(chData.RawData)
+						y := make([]int8, sampleLen)
+
+						copy(y, chData.RawData)
 						
 						series = append(series, map[string]any{
 							"channel": chID,
 							"name":    meta.DigitalChannels[chNum-1].ChannelName,
-							"t":         t,
-							"y":         y,
+							"y":       y,
 						})
 						break
 					}
@@ -274,18 +265,10 @@ func main() {
 			}
 		}
 		
-		// Calculate window
-		var startTime, endTime float64
-		if len(series) > 0 {
-			if tArr, ok := series[0]["t"].([]float64); ok && len(tArr) > 0 {
-				startTime = tArr[0]
-				endTime = tArr[len(tArr)-1]
-			}
-		}
-		
 		c.JSON(http.StatusOK, gin.H{
 			"series": series,
-			"window": map[string]float64{"start": startTime, "end": endTime},
+			"times":   timestamps,
+			"window": map[string]float64{"start": timestamps[0], "end": timestamps[len(timestamps)-1]},
 		})
 	})
 

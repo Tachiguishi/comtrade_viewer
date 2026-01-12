@@ -95,7 +95,7 @@ async function refreshData() {
         name: s.name,
         type: 'line',
         showSymbol: false,
-        data: s.t.map((t, i) => [t, s.y[i]]),
+        data: s.y.map((y, i) => [data.times[i], y]),
         animation: false, // Performance
       })),
       dataZoom: [
