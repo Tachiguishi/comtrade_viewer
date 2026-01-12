@@ -171,6 +171,30 @@ async function refreshData() {
             show: false,
           },
         },
+        formatter: function (params) {
+          // 根据data.series中的顺序排序显示
+          const sortedParams = Array.isArray(params)
+            ? params.slice().sort((a, b) => {
+                const seriesA = data.series.findIndex((s) => s.name === a.seriesName)
+                const seriesB = data.series.findIndex((s) => s.name === b.seriesName)
+                return seriesA - seriesB
+              })
+            : []
+          if (sortedParams.length === 0) return ''
+          // show x value at top
+          const xValue = Array.isArray(sortedParams[0]?.data)
+            ? sortedParams[0].data[0]
+            : sortedParams[0]?.data
+          return (
+            `${xValue}<br/>` +
+            sortedParams
+              .map((item) => {
+                const yValue = Array.isArray(item.data) ? item.data[1] : item.data
+                return `<span style="display:inline-block;margin-right:6px;width:8px;height:8px;border-radius:50%;background:${item.color};"></span>${item.seriesName}: ${yValue}`
+              })
+              .join('<br/>')
+          )
+        },
       },
       axisPointer: {
         link: [{ xAxisIndex: 'all' }],
