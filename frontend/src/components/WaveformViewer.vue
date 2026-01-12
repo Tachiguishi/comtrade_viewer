@@ -77,6 +77,14 @@ async function refreshData() {
       ...viewStore.selectedDigitalChannels,
     ])
 
+    // sort series by channel type and number
+    data.series.sort((a, b) => {
+      const typeA = a.type === 'analog' ? 0 : 1
+      const typeB = b.type === 'analog' ? 0 : 1
+      if (typeA !== typeB) return typeA - typeB
+      return a.channel - b.channel
+    })
+
     const seriesCount = data.series.length
     const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
 
@@ -86,6 +94,7 @@ async function refreshData() {
     const perGridPct = plotAreaPct / Math.max(seriesCount, 1)
     const LEFT_MARGIN_PX = 60
     const RIGHT_MARGIN_PX = 30
+
     const grids = data.series.map((_, i) => ({
       left: LEFT_MARGIN_PX,
       right: RIGHT_MARGIN_PX,

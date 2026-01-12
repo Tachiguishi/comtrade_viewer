@@ -233,7 +233,8 @@ func main() {
 						}
 
 						series = append(series, map[string]any{
-							"channel": chID,
+							"channel": chNum,
+							"type":   "analog",
 							"name":    meta.AnalogChannels[chNum-1].ChannelName,
 							"unit":    meta.AnalogChannels[chNum-1].Unit,
 							"y":       y,
@@ -256,7 +257,8 @@ func main() {
 						copy(y, chData.RawData)
 						
 						series = append(series, map[string]any{
-							"channel": chID,
+							"channel": chNum,
+							"type":   "digital",
 							"name":    meta.DigitalChannels[chNum-1].ChannelName,
 							"y":       y,
 						})
