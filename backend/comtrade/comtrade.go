@@ -74,46 +74,46 @@ func ParseComtrade(cfgPath string, datPath string) (*Metadata, *ChannelData, err
 //   - sampleLen:   Number of samples to produce in the time axis. This is the length
 //                 of the returned slice. When timestamps are used, sampleLen should
 //                 not exceed len(timestamps); typically it will equal len(timestamps).
-func ComputeTimeAxisFromMeta(meta Metadata, timestamps []uint32, sampleLen int) []float64 {
-	result := make([]float64, sampleLen)
+func ComputeTimeAxisFromMeta(meta Metadata, timestamps []uint32, sampleLen int) []float32 {
+	result := make([]float32, sampleLen)
 
-	secondsToMicrosecondsMultiplier := 1e6
+	secondsToMicrosecondsMultiplier := float32(1e6)
 	// Prefer Δt(N) = Σ(samples_in_segment / sample_rate) when nrates available
 	if meta.RatesNum > 0 && len(meta.SampleRates) > 0 {
-		elapsed := 0.0
+		elapsed := float32(0)
 		prevLast := 0
 		for _, sr := range meta.SampleRates {
 			end := min(sr.LastSampleNum, sampleLen)
-			rate := sr.SampRate
+			rate := float32(sr.SampRate)
 			if rate <= 0 {
 				rate = 1000.0
 			}
 			for i := prevLast; i < end; i++ {
-				result[i] = elapsed + float64(i-prevLast)/rate * secondsToMicrosecondsMultiplier
+				result[i] = elapsed + float32(i-prevLast)/rate * secondsToMicrosecondsMultiplier
 			}
-			elapsed += float64(end-prevLast) / rate * secondsToMicrosecondsMultiplier
+			elapsed += float32(end-prevLast) / rate * secondsToMicrosecondsMultiplier
 			prevLast = end
 			if prevLast >= sampleLen {
 				break
 			}
 		}
 		if prevLast < sampleLen {
-			rate := meta.SampleRates[len(meta.SampleRates)-1].SampRate
+			rate := float32(meta.SampleRates[len(meta.SampleRates)-1].SampRate)
 			if rate <= 0 {
 				rate = 1000.0
 			}
 			for i := prevLast; i < sampleLen; i++ {
-				result[i] = elapsed + float64(i-prevLast)/rate * secondsToMicrosecondsMultiplier
+				result[i] = elapsed + float32(i-prevLast)/rate * secondsToMicrosecondsMultiplier
 			}
 		}
 	} else {
-		mul := meta.TimeMultiplier
+		mul := float32(meta.TimeMultiplier)
 		if mul == 0 {
 			// Default to microseconds→seconds if not set
 			mul = 1e-6
 		}
 		for i := range result {
-			result[i] = float64(timestamps[i]) * mul * secondsToMicrosecondsMultiplier
+			result[i] = float32(timestamps[i]) * mul * secondsToMicrosecondsMultiplier
 		}
 	}
 

@@ -269,7 +269,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"series": series,
 			"times":   timestamps,
-			"window": map[string]float64{"start": timestamps[0], "end": timestamps[len(timestamps)-1]},
+			"window": map[string]float32{"start": timestamps[0], "end": timestamps[len(timestamps)-1]},
 		})
 	})
 

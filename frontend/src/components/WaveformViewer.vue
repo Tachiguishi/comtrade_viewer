@@ -97,8 +97,9 @@ async function refreshData() {
       min: data.window.start,
       max: data.window.end,
       gridIndex: i,
-      name: '',
-      axisLabel: { show: i === seriesCount - 1 },
+      axisLabel: {
+        show: i === seriesCount - 1,
+      },
       axisTick: { show: false },
       axisLine: { show: false },
       splitLine: { show: true },
@@ -114,7 +115,6 @@ async function refreshData() {
       },
       axisLabel: {
         show: true,
-        // formatter: s.unit ? `{value} ${s.unit}` : '{value}',
       },
       splitLine: { show: true },
     }))
@@ -148,7 +148,24 @@ async function refreshData() {
     })
 
     const option: echarts.EChartsOption = {
-      tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'cross',
+          link: [{ xAxisIndex: 'all' }],
+          crossStyle: {
+            color: '#999',
+            width: 1,
+            type: 'dashed',
+          },
+          label: {
+            show: false,
+          },
+        },
+      },
+      axisPointer: {
+        link: [{ xAxisIndex: 'all' }],
+      },
       grid: grids,
       xAxis: xAxes,
       yAxis: yAxes,
