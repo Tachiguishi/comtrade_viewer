@@ -37,8 +37,8 @@ export type Metadata = {
   frequency: number
   ratesName: number
   sampleRates: { sampRate: number; lastSampleNum: number }[]
-  startTime: number
-  endTime: number
+  startTime: string
+  endTime: string
   dataFileType: string
   timeMultiplier: number
 }
@@ -60,15 +60,13 @@ export async function getMetadata(id: string) {
   return data
 }
 
-export async function getWaveforms(id: string, channels: string[], startMs: number, endMs: number) {
+export async function getWaveforms(id: string, channels: string[]) {
   const params = new URLSearchParams({
     channels: channels.join(','),
-    start: String(startMs),
-    end: String(endMs),
   })
   const { data } = await api.get(`/datasets/${id}/waveforms`, { params })
   return data as {
-    series: { channelId: string; t: number[]; y: number[] }[]
+    series: { channel: string; name: string; t: number[]; y: number[] }[]
     window: { start: number; end: number }
   }
 }

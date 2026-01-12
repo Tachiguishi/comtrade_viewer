@@ -61,6 +61,7 @@ func newMetadata() *Metadata {
 		AnalogChannels:  make([]AnalogChannel, 0),
 		DigitalChannels: make([]DigitalChannel, 0),
 		SampleRates:     make([]SampleRate, 0),
+		TimeMultiplier:  1.0,	// default to 1.0 (version 1991 does not have this field)
 	}
 }
 
@@ -101,7 +102,7 @@ example: STATION,RELAY,1999
 */
 func parseStationLine(parser *cfgParser, line string) error {
 	parts := splitAndTrim(line, ",")
-	if len(parts) < 3 {
+	if len(parts) < 2 {
 		return fmt.Errorf("invalid STATION line: %s", line)
 	}
 	parser.cfg.Station = parts[0]
@@ -164,11 +165,20 @@ func parseChannelCountLine(parser *cfgParser, line string) error {
 /*
 analong channel line: An,ch_id,ph,ccbm,uu,a,b,skew,min,max,primary,secondary,PS
 example: 1,保护电流A相,,,A,0.0043641975308642,0.0000000000000000,0,-32767,32767,1000.000000,1.000000,S
+version 1991: 1,Vab,,,kV,0.014646,0.0,0.0,-2048,2047
 */
 func parseAnalogChannelLine(parser *cfgParser, line string) error {
 	parts := splitAndTrim(line, ",")
-	if len(parts) < 13 {
-		return fmt.Errorf("invalid ANALOG CHANNEL line: %s", line)
+
+	if parser.cfg.Version == "1991" {
+		// 1991 version has fewer fields
+		if len(parts) < 10 {
+			return fmt.Errorf("invalid ANALOG CHANNEL line for version 1991: %s", line)
+		}
+	} else {
+		if len(parts) < 13 {
+			return fmt.Errorf("invalid ANALOG CHANNEL line: %s", line)
+		}
 	}
 	var ch AnalogChannel
 	var err error
@@ -200,15 +210,22 @@ func parseAnalogChannelLine(parser *cfgParser, line string) error {
 	if err != nil {
 		return fmt.Errorf("invalid Analog MaxValue: %s", parts[9])
 	}
-	ch.Primary, err = strconv.ParseFloat(parts[10], 64)
-	if err != nil {
-		return fmt.Errorf("invalid Analog Primary: %s", parts[10])
+	if parser.cfg.Version == "1991" {
+		// set default values for missing fields
+		ch.Primary = 1.0
+		ch.Secondary = 1.0
+		ch.PS = ""
+	} else {
+		ch.Primary, err = strconv.ParseFloat(parts[10], 64)
+		if err != nil {
+			return fmt.Errorf("invalid Analog Primary: %s", parts[10])
+		}
+		ch.Secondary, err = strconv.ParseFloat(parts[11], 64)
+		if err != nil {
+			return fmt.Errorf("invalid Analog Secondary: %s", parts[11])
+		}
+		ch.PS = parts[12]
 	}
-	ch.Secondary, err = strconv.ParseFloat(parts[11], 64)
-	if err != nil {
-		return fmt.Errorf("invalid Analog Secondary: %s", parts[11])
-	}
-	ch.PS = parts[12]
 
 	parser.cfg.AnalogChannels = append(parser.cfg.AnalogChannels, ch)
 	if len(parser.cfg.AnalogChannels) >= parser.cfg.AnalogChannelNum {
@@ -223,11 +240,20 @@ func parseAnalogChannelLine(parser *cfgParser, line string) error {
 /*
 digital channel line: Dn,ch_id,ph,ccbm,y
 example: 1,总启动,,,0
+version 1991: 1,Feeder 01,0
 */
 func parseDigitalChannelLine(parser *cfgParser, line string) error {
 	parts := splitAndTrim(line, ",")
-	if len(parts) < 5 {
-		return fmt.Errorf("invalid DIGITAL CHANNEL line: %s", line)
+	
+	if parser.cfg.Version == "1991" {
+		// 1991 version has fewer fields
+		if len(parts) < 3 {
+			return fmt.Errorf("invalid DIGITAL CHANNEL line for version 1991: %s", line)
+		}
+	} else {
+		if len(parts) < 5 {
+			return fmt.Errorf("invalid DIGITAL CHANNEL line: %s", line)
+		}
 	}
 	var ch DigitalChannel
 	var err error
@@ -236,11 +262,21 @@ func parseDigitalChannelLine(parser *cfgParser, line string) error {
 		return fmt.Errorf("invalid Digital ChannelNumber: %s", parts[0])
 	}
 	ch.ChannelName = parts[1]
-	ch.Phase = parts[2]
-	ch.CCBM = parts[3]
-	ch.Y, err = strconv.Atoi(parts[4])
-	if err != nil {
-		return fmt.Errorf("invalid Digital Y: %s", parts[4])
+	if parser.cfg.Version == "1991" {
+		// set default values for missing fields
+		ch.Phase = ""
+		ch.CCBM = ""
+		ch.Y, err = strconv.Atoi(parts[2])
+		if err != nil {
+			return fmt.Errorf("invalid Digital Y: %s", parts[2])
+		}
+	} else {
+		ch.Phase = parts[2]
+		ch.CCBM = parts[3]
+		ch.Y, err = strconv.Atoi(parts[4])
+		if err != nil {
+			return fmt.Errorf("invalid Digital Y: %s", parts[4])
+		}
 	}
 
 	parser.cfg.DigitalChannels = append(parser.cfg.DigitalChannels, ch)
@@ -397,6 +433,10 @@ func ParseCFGFile(r io.Reader) (*Metadata, error) {
 	parser := newCFGParser()
 	for scanner.Scan() {
 		line := scanner.Text()
+		// skip empty lines
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
 		err := parser.parseLine(line)
 		if err != nil {
 			return nil, err

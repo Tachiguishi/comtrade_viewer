@@ -184,12 +184,12 @@ func main() {
 		// Build series response
 		series := make([]map[string]any, 0, len(chs))
 		
-		// Calculate sampling rate for time axis
-		sampleRate := 1000.0 // default
-		if len(meta.SampleRates) > 0 {
-			sampleRate = meta.SampleRates[0].SampRate
-		}
-		timeStep := 1.0 / sampleRate
+		// // Calculate sampling rate for time axis
+		// sampleRate := 1000.0 // default
+		// if len(meta.SampleRates) > 0 {
+		// 	sampleRate = meta.SampleRates[0].SampRate
+		// }
+		// timeStep := 1.0 / sampleRate
 		
 		for _, chID := range chs {
 			chID = strings.TrimSpace(chID)
@@ -198,9 +198,9 @@ func main() {
 			}
 			
 			// Check if it's analog (A1, A2, etc) or digital (D1, D2, etc)
-			if strings.HasPrefix(chID, "A") {
+			if after, ok :=strings.CutPrefix(chID, "A"); ok  {
 				// Analog channel
-				chNum, err := strconv.Atoi(strings.TrimPrefix(chID, "A"))
+				chNum, err := strconv.Atoi(after)
 				if err != nil {
 					continue
 				}
@@ -208,8 +208,9 @@ func main() {
 				// Find the channel data
 				for _, chData := range dat.AnalogChannels {
 					if chData.ChannelNumber == chNum {
-						t := make([]float64, len(chData.RawDataFloat))
-						y := make([]float64, len(chData.RawDataFloat))
+						sampleLen := max(len(chData.RawData), len(chData.RawDataFloat))
+						t := make([]float64, sampleLen)
+						y := make([]float64, sampleLen)
 						
 						// Get scaling factors from metadata
 						var multiplier, offset float64 = 1.0, 0.0
@@ -219,23 +220,34 @@ func main() {
 							offset = ch.Offset
 						}
 						
-						for i, d := range chData.RawDataFloat {
-							t[i] = float64(i) * timeStep
-							// Apply scaling: physical_value = raw * multiplier + offset
-							y[i] = float64(d)*multiplier + offset
+						if len(chData.RawDataFloat) == sampleLen {
+							// Use float data if available
+							for i, d := range chData.RawDataFloat {
+								t[i] = float64(dat.Timestamps[i])
+								// Apply scaling: physical_value = raw * multiplier + offset
+								y[i] = float64(d)*multiplier + offset
+							}
+						} else  {
+							// Fallback to int data
+							for i, d := range chData.RawData {
+								t[i] = float64(dat.Timestamps[i])
+								// Apply scaling: physical_value = raw * multiplier + offset
+								y[i] = float64(d)*multiplier + offset
+							}
 						}
-						
+
 						series = append(series, map[string]any{
-							"channelId": chID,
+							"channel": chID,
+							"name":    meta.AnalogChannels[chNum-1].ChannelName,
 							"t":         t,
 							"y":         y,
 						})
 						break
 					}
 				}
-			} else if strings.HasPrefix(chID, "D") {
+			} else if after0, ok0 :=strings.CutPrefix(chID, "D"); ok0  {
 				// Digital channel
-				chNum, err := strconv.Atoi(strings.TrimPrefix(chID, "D"))
+				chNum, err := strconv.Atoi(after0)
 				if err != nil {
 					continue
 				}
@@ -246,12 +258,13 @@ func main() {
 						y := make([]int8, len(chData.RawData))
 						
 						for i, d := range chData.RawData {
-							t[i] = float64(i) * timeStep
+							t[i] = float64(dat.Timestamps[i])
 							y[i] = d
 						}
 						
 						series = append(series, map[string]any{
-							"channelId": chID,
+							"channel": chID,
+							"name":    meta.DigitalChannels[chNum-1].ChannelName,
 							"t":         t,
 							"y":         y,
 						})

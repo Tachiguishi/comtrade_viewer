@@ -84,13 +84,22 @@ const filteredDigitalChannels = computed(() => {
 })
 
 async function select(id: string) {
+  viewStore.clearChannelSelection()
   await datasetStore.loadMetadata(id)
-  if (datasetStore.metadata && viewStore.selectedAnalogChannels.length === 0) {
-    const defaults = datasetStore.metadata.analogChannels.slice(0, 3).map((c) => c.id)
-    viewStore.setAnalogChannels(defaults)
+  if (datasetStore.metadata) {
+    viewStore.setMetaData(
+      datasetStore.metadata.station,
+      datasetStore.metadata.relay,
+      datasetStore.metadata.version,
+    )
+    viewStore.setTimeRange(datasetStore.metadata.startTime, datasetStore.metadata.endTime)
+
+    if (viewStore.selectedAnalogChannels.length === 0) {
+      const defaults = datasetStore.metadata.analogChannels.slice(0, 3).map((c) => c.id)
+      viewStore.setAnalogChannels(defaults)
+    }
   }
 }
-
 function formatSize(bytes: number) {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'

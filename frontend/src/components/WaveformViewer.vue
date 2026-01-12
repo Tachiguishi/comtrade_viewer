@@ -1,7 +1,11 @@
 <template>
   <div class="viewer-container">
     <div class="toolbar">
-      <span>Window: {{ viewStore.startMs.toFixed(1) }}ms - {{ viewStore.endMs.toFixed(1) }}ms</span>
+      <span>station: {{ viewStore.station }}</span>
+      <span>relay: {{ viewStore.relay }}</span>
+      <span>version: {{ viewStore.version }}</span>
+      <span>start: {{ viewStore.startTime }}</span>
+      <span>end: {{ viewStore.endTime }}</span>
       <button @click="refreshData">Refresh View</button>
     </div>
     <div ref="chartRef" class="chart"></div>
@@ -68,16 +72,14 @@ async function refreshData() {
 
   loading.value = true
   try {
-    const data = await getWaveforms(
-      datasetStore.currentId,
-      [...viewStore.selectedAnalogChannels, ...viewStore.selectedDigitalChannels],
-      viewStore.startMs,
-      viewStore.endMs,
-    )
+    const data = await getWaveforms(datasetStore.currentId, [
+      ...viewStore.selectedAnalogChannels,
+      ...viewStore.selectedDigitalChannels,
+    ])
 
     const option: echarts.EChartsOption = {
       tooltip: { trigger: 'axis' },
-      legend: { data: data.series.map((s) => s.channelId), bottom: 0 },
+      legend: { data: data.series.map((s) => s.name), bottom: 0 },
       grid: { left: 50, right: 30, top: 20, bottom: 60, containLabel: true },
       xAxis: {
         type: 'value',
@@ -90,7 +92,7 @@ async function refreshData() {
         scale: true,
       },
       series: data.series.map((s) => ({
-        name: s.channelId,
+        name: s.name,
         type: 'line',
         showSymbol: false,
         data: s.t.map((t, i) => [t, s.y[i]]),

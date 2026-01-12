@@ -8,15 +8,14 @@ import (
 )
 
 type AnalogChannelData struct {
-	ChannelNumber int
-	RawData          []int32
-	RawDataFloat     []float32
-	ComputedData     []float64
+	ChannelNumber int `json:"channel"`
+	RawData          []int32 `json:"rawData"`
+	RawDataFloat     []float32 `json:"rawDataFloat"`
 }
 
 type DigitalChannelData struct {
-	ChannelNumber int
-	RawData          []int8
+	ChannelNumber int `json:"channel"`
+	RawData          []int8 `json:"rawData"`
 }
 
 type ChannelData struct {
@@ -76,7 +75,7 @@ func (dat *ChannelData) AddDigitalData(channelNumber int, value int8) {
 	})
 }
 
-func parseDATFile1999(f io.Reader, cfg *Metadata) (*ChannelData, error) {
+func parseDATFile(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 	switch cfg.DataFileType {
 	case "ascii":
 		return parseDATFileASCII(f, cfg)
@@ -273,10 +272,8 @@ func parseDATFileBinary(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 
 func ParseDATFile(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 	switch cfg.Version {
-	case "1999":
-		return parseDATFile1999(f, cfg)
-	// case "2013":
-	// 	return parseDATFile2013(f, cfg)
+	case "1991", "1999", "2013":
+		return parseDATFile(f, cfg)
 	default:
 		return nil, fmt.Errorf("unsupported COMTRADE version: %s", cfg.Version)
 	}
