@@ -20,7 +20,12 @@
         <input v-model="analogFilter" type="text" placeholder="Filter..." class="filter-input" />
       </div>
       <div class="channel-list">
-        <label v-for="ch in filteredAnalogChannels" :key="ch.id" class="channel-item">
+        <label
+          v-for="ch in filteredAnalogChannels"
+          :key="ch.id"
+          class="channel-item"
+          :title="analogTooltip(ch)"
+        >
           <input
             type="checkbox"
             :checked="viewStore.selectedAnalogChannels.includes('A' + ch.id.toString())"
@@ -35,7 +40,12 @@
         <input v-model="digitalFilter" type="text" placeholder="Filter..." class="filter-input" />
       </div>
       <div class="channel-list">
-        <label v-for="ch in filteredDigitalChannels" :key="ch.id" class="channel-item">
+        <label
+          v-for="ch in filteredDigitalChannels"
+          :key="ch.id"
+          class="channel-item"
+          :title="digitalTooltip(ch)"
+        >
           <input
             type="checkbox"
             :checked="viewStore.selectedDigitalChannels.includes('D' + ch.id.toString())"
@@ -52,6 +62,7 @@
 import { onMounted, ref, computed } from 'vue'
 import { useDatasetStore } from '../stores/dataset'
 import { useViewStore } from '../stores/view'
+import type { AnalogChannelMeta, DigitalChannelMeta } from '../api'
 
 const datasetStore = useDatasetStore()
 const viewStore = useViewStore()
@@ -105,6 +116,12 @@ function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
+
+const analogTooltip = (ch: AnalogChannelMeta) =>
+  `Phase: ${ch.phase || '-'}\nCCBM: ${ch.ccbm || '-'}\nMultiplier: ${ch.multiplier}\nOffset: ${ch.offset}\nSkew: ${ch.skew}\nRange: [${ch.minValue}, ${ch.maxValue}]\nPrimary/Secondary: ${ch.primary}/${ch.secondary}\nPorS: ${ch.ps}`
+
+const digitalTooltip = (ch: DigitalChannelMeta) =>
+  `Phase: ${ch.phase || '-'}\nCCBM: ${ch.ccbm || '-'}\nY: ${ch.y}`
 </script>
 
 <style scoped>
