@@ -55,6 +55,7 @@ async function select(id: string) {
       datasetStore.metadata.station,
       datasetStore.metadata.relay,
       datasetStore.metadata.version,
+      datasetStore.metadata.dataFileType,
     )
     viewStore.setTimeRange(datasetStore.metadata.startTime, datasetStore.metadata.endTime)
 

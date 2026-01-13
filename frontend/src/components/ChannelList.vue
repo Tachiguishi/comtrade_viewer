@@ -15,7 +15,7 @@
           size="small"
           style="margin-bottom: 12px"
         />
-        <n-scrollbar style="max-height: 300px">
+        <n-scrollbar style="max-height: 40vh">
           <n-space vertical :size="4">
             <n-checkbox
               v-for="ch in filteredAnalogChannels"
@@ -25,7 +25,7 @@
             >
               <n-tooltip :delay="500">
                 <template #trigger>
-                  <span>
+                  <span style="display: flex">
                     <span class="channel-name analog">{{ ch.id }}. {{ ch.name }}</span>
                     <span class="channel-unit">{{ ch.unit }}</span>
                   </span>
@@ -57,7 +57,7 @@
           size="small"
           style="margin-bottom: 12px"
         />
-        <n-scrollbar style="max-height: 300px">
+        <n-scrollbar style="max-height: 38vh">
           <n-space vertical :size="4">
             <n-checkbox
               v-for="ch in filteredDigitalChannels"
@@ -125,8 +125,11 @@ const filteredDigitalChannels = computed(() => {
   justify-content: center;
   min-height: 200px;
 }
+.n-divider {
+  margin: 5px 0;
+}
 .channel-section {
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 .channel-name {
   font-size: 13px;
@@ -141,5 +144,6 @@ const filteredDigitalChannels = computed(() => {
 .channel-unit {
   font-size: 12px;
   color: #888;
+  margin-left: auto;
 }
 </style>

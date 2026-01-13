@@ -35,7 +35,7 @@ export type Metadata = {
   analogChannels: AnalogChannelMeta[]
   digitalChannels: DigitalChannelMeta[]
   frequency: number
-  ratesName: number
+  ratesNum: number
   sampleRates: { sampRate: number; lastSampleNum: number }[]
   startTime: string
   endTime: string

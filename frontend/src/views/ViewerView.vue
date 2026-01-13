@@ -10,9 +10,7 @@
         collapse-mode="width"
       >
         <div class="channel-panel">
-          <n-card title="通道选择" :bordered="false">
-            <ChannelList />
-          </n-card>
+          <ChannelList />
         </div>
       </n-layout-sider>
       <n-layout-content>
@@ -23,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { NLayout, NLayoutSider, NLayoutContent, NCard } from 'naive-ui'
+import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
 import WaveformViewer from '../components/WaveformViewer.vue'
 import ChannelList from '../components/ChannelList.vue'
 </script>
@@ -34,7 +32,7 @@ import ChannelList from '../components/ChannelList.vue'
   overflow: hidden;
 }
 .channel-panel {
-  padding: 16px;
+  padding: 0 16px;
   height: 100%;
   overflow-y: auto;
 }

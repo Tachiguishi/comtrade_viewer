@@ -3,10 +3,11 @@
     <n-card :bordered="false">
       <template #header>
         <n-space align="center" justify="space-between">
-          <n-space :size="12">
+          <n-space :size="14" wrap>
             <n-tag type="info" size="small">站点: {{ viewStore.station }}</n-tag>
-            <n-tag type="info" size="small">继电器: {{ viewStore.relay }}</n-tag>
+            <n-tag type="info" size="small">设备: {{ viewStore.relay }}</n-tag>
             <n-tag type="info" size="small">版本: {{ viewStore.version }}</n-tag>
+            <n-tag type="info" size="small">数据类型: {{ viewStore.dataType.toUpperCase() }}</n-tag>
             <n-tag type="default" size="small">开始: {{ viewStore.startTime }}</n-tag>
             <n-tag type="default" size="small">结束: {{ viewStore.endTime }}</n-tag>
           </n-space>
@@ -45,6 +46,8 @@ onMounted(() => {
   if (chartRef.value) {
     chartInstance.value = echarts.init(chartRef.value)
     window.addEventListener('resize', resizeChart)
+
+    refreshData()
   }
 })
 
@@ -248,12 +251,15 @@ async function refreshData() {
 <style scoped>
 .viewer-container {
   height: 100%;
-  padding: 16px;
+  /* padding: 16px; */
   position: relative;
+}
+:deep(.n-card-header) {
+  padding: 10px 24px; /* 你想要的 padding 值 */
 }
 .chart {
   width: 100%;
-  height: calc(100vh - 200px);
+  height: calc(100vh - 125px);
   min-height: 400px;
 }
 .loading-overlay {
