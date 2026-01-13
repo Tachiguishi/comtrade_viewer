@@ -10,6 +10,7 @@
     </div>
     <div ref="chartRef" class="chart"></div>
     <div v-if="loading" class="loading-overlay">Loading Data...</div>
+    <div v-if="datasetStore.error" class="error-banner">{{ datasetStore.error }}</div>
   </div>
 </template>
 
@@ -230,7 +231,8 @@ async function refreshData() {
     // Optional: sync zoom back to store
     // chartInstance.value?.on('dataZoom', ...)
   } catch (e) {
-    console.error(e)
+    const msg = e instanceof Error ? e.message : String(e)
+    datasetStore.error = msg
   } finally {
     loading.value = false
   }
@@ -267,5 +269,16 @@ async function refreshData() {
   align-items: center;
   justify-content: center;
   z-index: 10;
+}
+.error-banner {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  background: #ffecec;
+  color: #b00020;
+  border: 1px solid #ffc4c4;
+  padding: 6px 8px;
+  border-radius: 4px;
 }
 </style>

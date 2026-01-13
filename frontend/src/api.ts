@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 
 export const api = axios.create({ baseURL: '/api' })
 
@@ -70,4 +70,38 @@ export async function getWaveforms(id: string, channels: string[]) {
     times: number[]
     window: { start: number; end: number }
   }
+}
+
+// --- Error utilities & upload with progress ---
+export type ApiError = { error?: { code: string; message: string; details?: unknown } } | string
+
+export function extractApiError(e: unknown): { message: string; details?: unknown } {
+  // Axios error shape handling
+  const ax = e as AxiosError
+  const data = ax?.response?.data as ApiError | undefined
+  if (data && typeof data === 'object' && 'error' in data && data.error) {
+    return { message: data.error.message, details: data.error.details }
+  }
+  if (typeof data === 'string') {
+    return { message: data }
+  }
+  const msg = ax?.message || (e instanceof Error ? e.message : '请求失败')
+  return { message: msg }
+}
+
+export async function importDatasetWithProgress(
+  form: FormData,
+  onProgress?: (pct: number) => void,
+) {
+  const { data } = await api.post('/datasets/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: (evt) => {
+      if (!onProgress) return
+      const total = evt.total || 0
+      const loaded = evt.loaded || 0
+      const pct = total > 0 ? Math.round((loaded / total) * 100) : 0
+      onProgress(pct)
+    },
+  })
+  return data as { datasetId: string; name: string }
 }

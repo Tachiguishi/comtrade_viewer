@@ -85,27 +85,46 @@ func main() {
 	// Upload
 	r.POST("/api/datasets/import", func(c *gin.Context) {
 		if err := c.Request.ParseMultipartForm(256 << 20); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid form"})
+			writeError(c, http.StatusBadRequest, "INVALID_FORM", "无效的表单数据", gin.H{"hint": "请通过multipart/form-data提交.cfg与.dat文件"})
 			return
 		}
 		fh := c.Request.MultipartForm
 		datasetID := strconv.FormatInt(time.Now().UnixNano(), 10)
 		dp := filepath.Join(dataRoot, datasetID)
 		if err := ensureDir(dp); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
+			writeError(c, http.StatusInternalServerError, "STORAGE_ERROR", "服务器存储异常", gin.H{"detail": err.Error()})
+			return
+		}
+		// Validate presence and extensions before saving
+		if !hasFileField(fh, "cfg") {
+			writeError(c, http.StatusBadRequest, "CFG_MISSING", ".cfg文件缺失", gin.H{"hint": "请选择配置文件(.cfg)"})
+			return
+		}
+		if !hasFileField(fh, "dat") {
+			writeError(c, http.StatusBadRequest, "DAT_MISSING", ".dat文件缺失", gin.H{"hint": "请选择数据文件(.dat)"})
+			return
+		}
+		// Extension checks (case-insensitive)
+		if !hasFileExt(fh, "cfg", ".cfg") {
+			writeError(c, http.StatusBadRequest, "CFG_EXT_INVALID", "配置文件扩展名无效", gin.H{"expected": ".cfg"})
+			return
+		}
+		if !hasFileExt(fh, "dat", ".dat") {
+			writeError(c, http.StatusBadRequest, "DAT_EXT_INVALID", "数据文件扩展名无效", gin.H{"expected": ".dat"})
 			return
 		}
 		if err := saveUploadedFile(fh, "cfg", filepath.Join(dp, "cfg")); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "cfg file required"})
+			writeError(c, http.StatusBadRequest, "CFG_SAVE_FAILED", "保存配置文件失败", gin.H{"detail": err.Error()})
 			return
 		}
 		if err := saveUploadedFile(fh, "dat", filepath.Join(dp, "dat")); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "dat file required"})
+			writeError(c, http.StatusBadRequest, "DAT_SAVE_FAILED", "保存数据文件失败", gin.H{"detail": err.Error()})
 			return
 		}
 		meta, dat, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "parse error: " + err.Error()})
+			code, msg, details := toFriendlyParseError(err)
+			writeError(c, http.StatusBadRequest, code, msg, details)
 			return
 		}
 		_ = writeJSON(filepath.Join(dp, "meta.json"), meta)
@@ -117,7 +136,7 @@ func main() {
 	r.GET("/api/datasets", func(c *gin.Context) {
 		lst, err := listDatasets(dataRoot)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "list error"})
+			writeError(c, http.StatusInternalServerError, "LIST_ERROR", "获取数据集列表失败", gin.H{"detail": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, lst)
@@ -139,7 +158,7 @@ func main() {
 			c.JSON(http.StatusOK, m)
 			return
 		}
-		c.JSON(http.StatusNotFound, gin.H{"error": "metadata not found"})
+		writeError(c, http.StatusNotFound, "METADATA_NOT_FOUND", "未找到元数据", gin.H{"id": id})
 	})
 
 	// Waveforms (real data from parsed ComTrade)
@@ -166,7 +185,8 @@ func main() {
 		if len(dat.Timestamps) == 0 {
 			m, d, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse ComTrade: " + err.Error()})
+				code, msg, details := toFriendlyParseError(err)
+				writeError(c, http.StatusInternalServerError, code, msg, details)
 				return
 			}
 			meta = *m
@@ -174,14 +194,14 @@ func main() {
 		}
 
 		if len(dat.Timestamps) == 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "no channel data"})
+			writeError(c, http.StatusInternalServerError, "NO_DATA", "未找到通道数据", gin.H{"id": id})
 			return
 		}
 		
 		// Parse requested channels
 		chsStr := c.Query("channels")
 		if chsStr == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "channels parameter required"})
+			writeError(c, http.StatusBadRequest, "CHANNELS_REQUIRED", "缺少channels参数", gin.H{"format": "A1,A2,D1,..."})
 			return
 		}
 		chs := strings.Split(chsStr, ",")
@@ -281,7 +301,12 @@ func main() {
 		p := filepath.Join(dataRoot, id, "annotations.json")
 		f, err := os.Open(p)
 		if err != nil {
-			c.JSON(http.StatusOK, []any{})
+			// Return empty list on absent file, else error
+			if os.IsNotExist(err) {
+				c.JSON(http.StatusOK, []any{})
+				return
+			}
+			writeError(c, http.StatusInternalServerError, "ANNOTATIONS_READ_ERROR", "读取标注失败", gin.H{"detail": err.Error()})
 			return
 		}
 		defer f.Close()
@@ -296,7 +321,7 @@ func main() {
 		p := filepath.Join(dataRoot, id, "annotations.json")
 		var ann map[string]any
 		if err := c.BindJSON(&ann); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "bad json"})
+			writeError(c, http.StatusBadRequest, "BAD_JSON", "JSON格式错误", gin.H{"detail": err.Error()})
 			return
 		}
 		var out []map[string]any
@@ -324,7 +349,10 @@ func main() {
 			}
 			kept = append(kept, a)
 		}
-		_ = writeJSON(p, kept)
+		if err := writeJSON(p, kept); err != nil {
+			writeError(c, http.StatusInternalServerError, "ANNOTATIONS_WRITE_ERROR", "写入标注失败", gin.H{"detail": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -346,4 +374,65 @@ func mathSin(x float64) float64 { // small inline to avoid extra imports
 	x5 := x3 * x * x
 	x7 := x5 * x * x
 	return x - (x3 / 6.0) + (x5 / 120.0) - (x7 / 5040.0)
+}
+
+// --- Error handling helpers ---
+
+type apiError struct {
+	Code    string      `json:"code"`
+	Message string      `json:"message"`
+	Details interface{} `json:"details,omitempty"`
+}
+
+func writeError(c *gin.Context, status int, code string, message string, details interface{}) {
+	c.JSON(status, gin.H{"error": apiError{Code: code, Message: message, Details: details}})
+}
+
+func hasFileField(fh *multipart.Form, field string) bool {
+	files := fh.File[field]
+	return len(files) > 0
+}
+
+func hasFileExt(fh *multipart.Form, field string, want string) bool {
+	files := fh.File[field]
+	if len(files) == 0 {
+		return false
+	}
+	name := files[0].Filename
+	return strings.EqualFold(filepath.Ext(name), want)
+}
+
+// toFriendlyParseError maps internal parse errors to user-friendly messages
+func toFriendlyParseError(err error) (string, string, gin.H) {
+	s := err.Error()
+	// Generic fallback
+	code := "PARSE_ERROR"
+	msg := "解析COMTRADE文件失败"
+	details := gin.H{"error": s}
+
+	// Specific mappings
+	switch {
+	case strings.Contains(s, "failed to open CFG"):
+		code = "CFG_OPEN_FAILED"
+		msg = "无法打开配置文件(.cfg)"
+	case strings.Contains(s, "failed to parse CFG"):
+		code = "CFG_PARSE_FAILED"
+		msg = "配置文件(.cfg)解析失败，请检查格式"
+	case strings.Contains(s, "failed to open DAT"):
+		code = "DAT_OPEN_FAILED"
+		msg = "无法打开数据文件(.dat)"
+	case strings.Contains(s, "failed to parse DAT"):
+		code = "DAT_PARSE_FAILED"
+		msg = "数据文件(.dat)解析失败，请检查格式与版本"
+	case strings.Contains(s, "unsupported COMTRADE version"):
+		code = "VERSION_UNSUPPORTED"
+		msg = "不支持的COMTRADE版本"
+	case strings.Contains(s, "unsupported data file type") || strings.Contains(s, "unsupported analog data type"):
+		code = "DATA_TYPE_UNSUPPORTED"
+		msg = "不支持的数据文件类型，请检查cfg中的data_file_type"
+	case strings.Contains(s, "invalid "):
+		code = "FORMAT_INVALID"
+		msg = "文件内容格式不合法，请检查字段"
+	}
+	return code, msg, details
 }
