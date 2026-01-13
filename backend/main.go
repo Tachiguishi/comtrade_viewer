@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -210,6 +211,8 @@ func main() {
 		series := make([]map[string]any, 0, len(chs))
 		timestamps := comtrade.ComputeTimeAxisFromMeta(meta, dat.Timestamps, len(dat.Timestamps))
 
+		analogChannels := make([]int, 0)
+		digitalChannels := make([]int, 0)
 		for _, chID := range chs {
 			chID = strings.TrimSpace(chID)
 			if chID == "" {
@@ -223,69 +226,107 @@ func main() {
 				if err != nil {
 					continue
 				}
-				
-				// Find the channel data
-				for _, chData := range dat.AnalogChannels {
-					if chData.ChannelNumber == chNum {
-						sampleLen := max(len(chData.RawData), len(chData.RawDataFloat))
-						y := make([]float64, sampleLen)
-						
-						// Get scaling factors from metadata
-						var multiplier, offset float64 = 1.0, 0.0
-						if chNum-1 < len(meta.AnalogChannels) {
-							ch := meta.AnalogChannels[chNum-1]
-							multiplier = ch.Multiplier
-							offset = ch.Offset
-						}
-						
-						if len(chData.RawDataFloat) == sampleLen {
-							// Use float data if available
-							for i, d := range chData.RawDataFloat {
-								// Apply scaling: physical_value = raw * multiplier + offset
-								y[i] = float64(d)*multiplier + offset
-							}
-						} else  {
-							// Fallback to int data
-							for i, d := range chData.RawData {
-								// Apply scaling: physical_value = raw * multiplier + offset
-								y[i] = float64(d)*multiplier + offset
-							}
-						}
 
-						series = append(series, map[string]any{
-							"channel": chNum,
-							"type":   "analog",
-							"name":    meta.AnalogChannels[chNum-1].ChannelName,
-							"unit":    meta.AnalogChannels[chNum-1].Unit,
-							"y":       y,
-						})
-						break
-					}
-				}
+				analogChannels = append(analogChannels, chNum)
 			} else if after0, ok0 :=strings.CutPrefix(chID, "D"); ok0  {
 				// Digital channel
 				chNum, err := strconv.Atoi(after0)
 				if err != nil {
 					continue
 				}
-				
-				for _, chData := range dat.DigitalChannels {
-					if chData.ChannelNumber == chNum {
-						sampleLen := len(chData.RawData)
-						y := make([]int8, sampleLen)
 
-						copy(y, chData.RawData)
-						
-						series = append(series, map[string]any{
-							"channel": chNum,
-							"type":   "digital",
-							"name":    meta.DigitalChannels[chNum-1].ChannelName,
-							"y":       y,
-						})
-						break
-					}
+				digitalChannels = append(digitalChannels, chNum)
+			}
+		}
+
+		sort.Ints(analogChannels)
+		sort.Ints(digitalChannels)
+
+		// Find the channel data
+		for _, chData := range dat.AnalogChannels {
+			if len(analogChannels) == 0 {
+				break
+			}
+
+			found := false
+			for _, chNum := range analogChannels {
+				if chData.ChannelNumber == chNum {
+					found = true
+					// remove from list to avoid duplicate processing
+					analogChannels = removeInt(analogChannels, chNum)
+					break
 				}
 			}
+			if !found {
+				continue
+			}
+
+			chNum := chData.ChannelNumber
+
+			sampleLen := max(len(chData.RawData), len(chData.RawDataFloat))
+			y := make([]float64, sampleLen)
+
+			// Get scaling factors from metadata
+			var multiplier, offset float64 = 1.0, 0.0
+			if chNum-1 < len(meta.AnalogChannels) {
+				ch := meta.AnalogChannels[chNum-1]
+				multiplier = ch.Multiplier
+				offset = ch.Offset
+			}
+			
+			if len(chData.RawDataFloat) == sampleLen {
+				// Use float data if available
+				for i, d := range chData.RawDataFloat {
+					// Apply scaling: physical_value = raw * multiplier + offset
+					y[i] = float64(d)*multiplier + offset
+				}
+			} else  {
+				// Fallback to int data
+				for i, d := range chData.RawData {
+					// Apply scaling: physical_value = raw * multiplier + offset
+					y[i] = float64(d)*multiplier + offset
+				}
+			}
+
+			series = append(series, map[string]any{
+				"channel": chNum,
+				"type":   "analog",
+				"name":    meta.AnalogChannels[chNum-1].ChannelName,
+				"unit":    meta.AnalogChannels[chNum-1].Unit,
+				"y":       y,
+			})
+		}
+
+		for _, chData := range dat.DigitalChannels {
+			if len(digitalChannels) == 0 {
+				break
+			}
+
+			found := false
+			for _, chNum := range digitalChannels {
+				if chData.ChannelNumber == chNum {
+					found = true
+					// remove from list to avoid duplicate processing
+					digitalChannels = removeInt(digitalChannels, chNum)
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+
+			chNum := chData.ChannelNumber
+			sampleLen := len(chData.RawData)
+			y := make([]int8, sampleLen)
+
+			copy(y, chData.RawData)
+			
+			series = append(series, map[string]any{
+				"channel": chNum,
+				"type":   "digital",
+				"name":    meta.DigitalChannels[chNum-1].ChannelName,
+				"y":       y,
+			})
 		}
 		
 		c.JSON(http.StatusOK, gin.H{
@@ -357,6 +398,15 @@ func main() {
 	})
 
 	r.Run(":8080")
+}
+
+func removeInt(source []int, target int) []int {
+	for i, v := range source {
+		if v == target {
+			return append(source[:i], source[i+1:]...)
+		}
+	}
+	return source
 }
 
 func writeJSON(path string, v any) error {

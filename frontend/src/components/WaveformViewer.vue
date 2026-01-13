@@ -91,12 +91,12 @@ async function refreshData() {
     ])
 
     // sort series by channel type and number
-    data.series.sort((a, b) => {
-      const typeA = a.type === 'analog' ? 0 : 1
-      const typeB = b.type === 'analog' ? 0 : 1
-      if (typeA !== typeB) return typeA - typeB
-      return a.channel - b.channel
-    })
+    // data.series.sort((a, b) => {
+    //   const typeA = a.type === 'analog' ? 0 : 1
+    //   const typeB = b.type === 'analog' ? 0 : 1
+    //   if (typeA !== typeB) return typeA - typeB
+    //   return a.channel - b.channel
+    // })
 
     const seriesCount = data.series.length
     const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
