@@ -1,54 +1,78 @@
 <template>
   <div class="upload-pane">
-    <h4>New Import</h4>
-    <div class="file-inputs">
-      <label>
-        .cfg:
-        <input
-          type="file"
+    <n-space vertical :size="12">
+      <n-form-item label="配置文件 (.cfg)">
+        <n-upload
+          :max="1"
           accept=".cfg"
-          @change="(e) => (cfgFile = (e.target as HTMLInputElement).files?.[0] || null)"
-        />
-      </label>
-      <label>
-        .dat:
-        <input
-          type="file"
+          :file-list="cfgFileList"
+          @update:file-list="handleCfgChange"
+        >
+          <n-button>选择 .cfg 文件</n-button>
+        </n-upload>
+      </n-form-item>
+
+      <n-form-item label="数据文件 (.dat)">
+        <n-upload
+          :max="1"
           accept=".dat"
-          @change="(e) => (datFile = (e.target as HTMLInputElement).files?.[0] || null)"
+          :file-list="datFileList"
+          @update:file-list="handleDatChange"
+        >
+          <n-button>选择 .dat 文件</n-button>
+        </n-upload>
+      </n-form-item>
+
+      <n-button
+        type="primary"
+        block
+        @click="handleUpload"
+        :disabled="!canUpload || datasetStore.loading"
+        :loading="datasetStore.loading"
+      >
+        {{ datasetStore.loading ? '导入中...' : '导入数据集' }}
+      </n-button>
+
+      <n-progress
+        v-if="datasetStore.uploadProgress > 0 && datasetStore.uploadProgress < 100"
+        type="line"
+        :percentage="datasetStore.uploadProgress"
+        :indicator-placement="'inside'"
+      />
+
+      <n-alert v-if="validationError" type="warning" :title="validationError" />
+      <n-alert v-else-if="error" type="error" :title="error">
+        <n-code
+          v-if="datasetStore.errorDetails"
+          :code="formatDetails(datasetStore.errorDetails)"
+          language="json"
         />
-      </label>
-    </div>
-    <button @click="handleUpload" :disabled="!canUpload || datasetStore.loading || validationError">
-      {{ datasetStore.loading ? 'Importing...' : 'Import Dataset' }}
-    </button>
-
-    <div
-      v-if="datasetStore.uploadProgress > 0 && datasetStore.uploadProgress < 100"
-      class="progress"
-    >
-      <div class="bar" :style="{ width: datasetStore.uploadProgress + '%' }"></div>
-      <span>{{ datasetStore.uploadProgress }}%</span>
-    </div>
-
-    <div v-if="validationError" class="error">{{ validationError }}</div>
-    <div v-else-if="error" class="error">
-      <div>{{ error }}</div>
-      <pre v-if="datasetStore.errorDetails" class="details">{{
-        formatDetails(datasetStore.errorDetails)
-      }}</pre>
-    </div>
+      </n-alert>
+    </n-space>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import {
+  // NSpace,
+  // NFormItem,
+  // NUpload,
+  // NButton,
+  // NProgress,
+  // NAlert,
+  // NCode,
+  type UploadFileInfo,
+} from 'naive-ui'
 import { useDatasetStore } from '../stores/dataset'
 
 const datasetStore = useDatasetStore()
-const cfgFile = ref<File | null>(null)
-const datFile = ref<File | null>(null)
+const cfgFileList = ref<UploadFileInfo[]>([])
+const datFileList = ref<UploadFileInfo[]>([])
 const error = ref('')
+
+const cfgFile = computed(() => cfgFileList.value[0]?.file || null)
+const datFile = computed(() => datFileList.value[0]?.file || null)
 
 const canUpload = computed(() => !!cfgFile.value && !!datFile.value)
 const validationError = computed(() => {
@@ -62,6 +86,14 @@ const validationError = computed(() => {
   return ''
 })
 
+function handleCfgChange(fileList: UploadFileInfo[]) {
+  cfgFileList.value = fileList
+}
+
+function handleDatChange(fileList: UploadFileInfo[]) {
+  datFileList.value = fileList
+}
+
 async function handleUpload() {
   if (!cfgFile.value || !datFile.value) return
   if (validationError.value) {
@@ -72,9 +104,8 @@ async function handleUpload() {
   try {
     await datasetStore.upload(cfgFile.value, datFile.value)
     // Clear inputs after success
-    cfgFile.value = null
-    datFile.value = null
-    // Reset file inputs visually if needed, simplistic here
+    cfgFileList.value = []
+    datFileList.value = []
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : '上传失败'
   }
@@ -91,49 +122,15 @@ function formatDetails(d: unknown): string {
 
 <style scoped>
 .upload-pane {
-  border-bottom: 1px solid #ddd;
-  padding-bottom: 10px;
-  margin-bottom: 10px;
-}
-.file-inputs {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-bottom: 8px;
-}
-button {
   width: 100%;
-  cursor: pointer;
 }
-.error {
-  color: red;
-  font-size: 12px;
-  margin-top: 4px;
+
+.n-form-item {
+  display: flex;
+  gap: 25px;
+  align-items: center;
 }
-.progress {
-  position: relative;
-  height: 8px;
-  background: #eee;
-  border-radius: 4px;
-  margin-top: 6px;
-}
-.progress .bar {
-  height: 100%;
-  background: #4caf50;
-  width: 0;
-  transition: width 0.2s ease;
-  border-radius: 4px;
-}
-.progress span {
-  display: inline-block;
-  margin-top: 4px;
-  font-size: 12px;
-}
-.details {
-  margin-top: 6px;
-  background: #f9f9f9;
-  border: 1px solid #eee;
-  padding: 6px;
-  white-space: pre-wrap;
+.n-form-item .n-form-item-label {
+  margin-right: 12px;
 }
 </style>

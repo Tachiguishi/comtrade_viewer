@@ -1,58 +1,87 @@
 <template>
-  <div class="layout">
-    <header class="topbar">
-      <h1>ComTrade Viewer</h1>
-    </header>
-    <main class="content">
-      <section class="sidebar">
-        <UploadPane />
-        <DatasetList class="dataset-list-pane" />
-      </section>
-      <section class="viewer">
-        <WaveformViewer />
-      </section>
-    </main>
-  </div>
+  <n-config-provider :theme="null">
+    <n-message-provider>
+      <n-layout style="height: 100vh">
+        <n-layout-header bordered class="app-header">
+          <div class="app-header-content">
+            <h1 class="app-title">ComTrade Viewer</h1>
+            <n-menu
+              mode="horizontal"
+              :options="menuOptions"
+              :value="activeKey"
+              @update:value="handleMenuSelect"
+            />
+          </div>
+        </n-layout-header>
+        <n-layout-content style="height: calc(100vh - 64px)">
+          <router-view />
+        </n-layout-content>
+      </n-layout>
+    </n-message-provider>
+  </n-config-provider>
 </template>
 
 <script setup lang="ts">
-import UploadPane from './components/UploadPane.vue'
-import DatasetList from './components/DatasetList.vue'
-import WaveformViewer from './components/WaveformViewer.vue'
+import { h, computed } from 'vue'
+import type { Component } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { NIcon } from 'naive-ui'
+import type { MenuOption } from 'naive-ui'
+import { CloudUploadOutline, BarChartOutline } from '@vicons/ionicons5'
+
+const router = useRouter()
+const route = useRoute()
+
+function renderIcon(icon: Component) {
+  return () => h(NIcon, null, { default: () => h(icon) })
+}
+
+const menuOptions: MenuOption[] = [
+  {
+    label: '波形列表',
+    key: 'upload',
+    icon: renderIcon(CloudUploadOutline),
+  },
+  {
+    label: '波形查看',
+    key: 'viewer',
+    icon: renderIcon(BarChartOutline),
+  },
+]
+
+const activeKey = computed(() => {
+  const path = route.path
+  if (path.startsWith('/upload')) return 'upload'
+  if (path.startsWith('/viewer')) return 'viewer'
+  return 'upload'
+})
+
+function handleMenuSelect(key: string) {
+  router.push(`/${key}`)
+}
 </script>
 
 <style scoped>
-.layout {
+.app-header {
+  height: 48px;
+  margin-top: 5px;
+  padding: 0 24px;
   display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+  align-items: center;
 }
-.topbar {
-  padding: 8px 12px;
-  border-bottom: 1px solid #eee;
-}
-.content {
+
+.app-header-content {
   display: flex;
-  flex: 1;
+  align-items: center;
+  width: 100%;
+  justify-content: space-between;
 }
-.sidebar {
-  width: 320px;
-  border-right: 1px solid #eee;
-  padding: 10px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.dataset-list-pane {
-  max-height: 75vh;
-}
-.viewer {
-  flex: 1;
-  padding: 10px;
-}
-h1 {
-  font-size: 18px;
+
+.app-title {
   margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 0 0 8px 0;
 }
 </style>

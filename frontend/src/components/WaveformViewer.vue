@@ -1,27 +1,40 @@
 <template>
   <div class="viewer-container">
-    <div class="toolbar">
-      <span>station: {{ viewStore.station }}</span>
-      <span>relay: {{ viewStore.relay }}</span>
-      <span>version: {{ viewStore.version }}</span>
-      <span>start: {{ viewStore.startTime }}</span>
-      <span>end: {{ viewStore.endTime }}</span>
-      <button @click="refreshData">Refresh View</button>
-    </div>
-    <div ref="chartRef" class="chart"></div>
-    <div v-if="loading" class="loading-overlay">Loading Data...</div>
-    <div v-if="datasetStore.error" class="error-banner">{{ datasetStore.error }}</div>
+    <n-card :bordered="false">
+      <template #header>
+        <n-space align="center" justify="space-between">
+          <n-space :size="12">
+            <n-tag type="info" size="small">站点: {{ viewStore.station }}</n-tag>
+            <n-tag type="info" size="small">继电器: {{ viewStore.relay }}</n-tag>
+            <n-tag type="info" size="small">版本: {{ viewStore.version }}</n-tag>
+            <n-tag type="default" size="small">开始: {{ viewStore.startTime }}</n-tag>
+            <n-tag type="default" size="small">结束: {{ viewStore.endTime }}</n-tag>
+          </n-space>
+          <n-button type="primary" @click="refreshData" :loading="loading"> 刷新视图 </n-button>
+        </n-space>
+      </template>
+      <div ref="chartRef" class="chart"></div>
+      <n-spin v-if="loading" :show="loading" class="loading-overlay">
+        <template #description>加载数据中...</template>
+      </n-spin>
+      <n-alert
+        v-if="datasetStore.error"
+        type="error"
+        :title="datasetStore.error"
+        class="error-banner"
+      />
+    </n-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted, shallowRef } from 'vue'
 import * as echarts from 'echarts'
+import { NCard, NSpace, NTag, NButton, NSpin, NAlert } from 'naive-ui'
 import { useDatasetStore } from '../stores/dataset'
 import { useViewStore } from '../stores/view'
 import { getWaveforms } from '../api'
 
-const props = defineProps({})
 const datasetStore = useDatasetStore()
 const viewStore = useViewStore()
 const chartRef = ref<HTMLElement>()
@@ -56,10 +69,6 @@ watch(
   },
   { deep: true },
 )
-
-// Also watch window (debouncing recommended in real app, simplistic here)
-// For now, update only on explicit refresh or selection change to avoid loop
-// Or we implement chart zoom event handling to update store
 
 async function refreshData() {
   if (
@@ -227,9 +236,6 @@ async function refreshData() {
     }
 
     chartInstance.value?.setOption(option, { notMerge: true })
-
-    // Optional: sync zoom back to store
-    // chartInstance.value?.on('dataZoom', ...)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     datasetStore.error = msg
@@ -241,44 +247,27 @@ async function refreshData() {
 
 <style scoped>
 .viewer-container {
-  display: flex;
-  flex-direction: column;
   height: 100%;
+  padding: 16px;
   position: relative;
 }
-.toolbar {
-  padding: 8px;
-  border-bottom: 1px solid #f0f0f0;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
 .chart {
-  flex: 1;
-  min-height: 0;
   width: 100%;
+  height: calc(100vh - 200px);
+  min-height: 400px;
 }
 .loading-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 10;
 }
 .error-banner {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
-  right: 8px;
-  background: #ffecec;
-  color: #b00020;
-  border: 1px solid #ffc4c4;
-  padding: 6px 8px;
-  border-radius: 4px;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 10;
 }
 </style>
