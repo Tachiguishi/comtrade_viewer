@@ -7,8 +7,24 @@
           accept=".cfg"
           :file-list="cfgFileList"
           @update:file-list="handleCfgChange"
+          :show-file-list="false"
         >
-          <n-button>选择 .cfg 文件</n-button>
+          <template #default>
+            <div style="display: flex; align-items: center; gap: 12px">
+              <n-button>选择 .cfg 文件</n-button>
+              <span v-if="cfgFileList.length" style="font-size: 13px; color: #555">
+                {{ cfgFileList[0]?.name }}
+                <n-button
+                  quaternary
+                  size="small"
+                  style="margin-left: 6px"
+                  @click.stop="cfgFileList = []"
+                >
+                  移除
+                </n-button>
+              </span>
+            </div>
+          </template>
         </n-upload>
       </n-form-item>
 
@@ -18,8 +34,24 @@
           accept=".dat"
           :file-list="datFileList"
           @update:file-list="handleDatChange"
+          :show-file-list="false"
         >
-          <n-button>选择 .dat 文件</n-button>
+          <template #default>
+            <div style="display: flex; align-items: center; gap: 12px">
+              <n-button>选择 .dat 文件</n-button>
+              <span v-if="datFileList.length" style="font-size: 13px; color: #555">
+                {{ datFileList[0]?.name }}
+                <n-button
+                  quaternary
+                  size="small"
+                  style="margin-left: 6px"
+                  @click.stop="datFileList = []"
+                >
+                  移除
+                </n-button>
+              </span>
+            </div>
+          </template>
         </n-upload>
       </n-form-item>
 
