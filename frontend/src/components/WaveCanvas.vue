@@ -1,5 +1,12 @@
 <template>
   <div class="waveViewer">
+    <div class="option-buttons" v-show="waveData.chns && waveData.chns.length > 0">
+      <button @click="horizontalZoom(true)" type="button">水平放大</button>
+      <button @click="horizontalZoom(false)" type="button">水平缩小</button>
+      <!-- <button @click="verticalZoom(10)" type="button">垂直放大</button>
+      <button @click="verticalZoom(-10)" type="button">垂直缩小</button> -->
+      <button @click="reStore()" type="button">还原波形</button>
+    </div>
     <div class="wave-view" v-show="waveData.chns && waveData.chns.length > 0">
       <!-- 蓝色游标 -->
       <div ref="blueCursor" class="cursor-line-container">
@@ -248,7 +255,19 @@ const loadWaveData = (result: WaveDataType): void => {
       waveCanvas.value.height = state.canvasH
     }
 
-    state.timeDiff = result.ts[getPointPos(state.cursor1)] - result.ts[getPointPos(state.cursor)]
+    if (getPointPos(state.cursor) >= result.ts.length) {
+      state.cursor = state.xmargin
+    }
+    if (getPointPos(state.cursor1) >= result.ts.length) {
+      state.cursor1 = state.xmargin + 200
+    }
+    const time1 = result.ts[getPointPos(state.cursor)]
+    const time2 = result.ts[getPointPos(state.cursor1)]
+    if (typeof time1 === 'number' && typeof time2 === 'number') {
+      state.timeDiff = time2 - time1
+    } else {
+      state.timeDiff = 0
+    }
     state.beginTime = result.beginTime.slice(0, result.beginTime.length - 3)
 
     parameter(result)
@@ -721,6 +740,15 @@ defineExpose({
   user-select: none;
 }
 
+.option-buttons {
+  display: flex;
+  gap: 10px;
+  position: absolute;
+  right: 15px;
+  top: 0;
+  z-index: 900;
+}
+
 .wave-view {
   position: relative;
   width: 100%;
@@ -750,7 +778,8 @@ defineExpose({
 .wave-container {
   z-index: 887;
   position: absolute;
-  top: 70px;
-  overflow: hidden;
+  top: 50px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 </style>
