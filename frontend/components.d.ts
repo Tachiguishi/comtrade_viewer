@@ -31,6 +31,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     UploadPane: typeof import('./src/components/UploadPane.vue')['default']
+    WaveCanvas: typeof import('./src/components/WaveCanvas.vue')['default']
     WaveformViewer: typeof import('./src/components/WaveformViewer.vue')['default']
   }
 }
@@ -56,5 +57,6 @@ declare global {
   const RouterLink: typeof import('vue-router')['RouterLink']
   const RouterView: typeof import('vue-router')['RouterView']
   const UploadPane: typeof import('./src/components/UploadPane.vue')['default']
+  const WaveCanvas: typeof import('./src/components/WaveCanvas.vue')['default']
   const WaveformViewer: typeof import('./src/components/WaveformViewer.vue')['default']
 }

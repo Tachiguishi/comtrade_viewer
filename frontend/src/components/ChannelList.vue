@@ -57,7 +57,7 @@
           size="small"
           style="margin-bottom: 12px"
         />
-        <n-scrollbar style="max-height: 38vh">
+        <n-scrollbar style="max-height: 37vh">
           <n-space vertical :size="4">
             <n-checkbox
               v-for="ch in filteredDigitalChannels"

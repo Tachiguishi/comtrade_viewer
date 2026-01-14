@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios'
 
 export const api = axios.create({ baseURL: '/api' })
+export const waveCanvasApi = axios.create({ baseURL: '/fault' })
 
 export type DatasetInfo = { datasetId: string; name: string; createdAt: number; sizeBytes: number }
 export type AnalogChannelMeta = {
@@ -70,6 +71,15 @@ export async function getWaveforms(id: string, channels: string[]) {
     times: number[]
     window: { start: number; end: number }
   }
+}
+
+export async function getWaveCanvas(fileDirectory: string, fileName: string) {
+  const params = new URLSearchParams({
+    fileDirectory: fileDirectory,
+    fileName: fileName,
+  })
+  const data = await waveCanvasApi.get(`/previewRCDTest`, { params })
+  return data
 }
 
 // --- Error utilities & upload with progress ---

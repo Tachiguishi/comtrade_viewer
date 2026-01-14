@@ -47,12 +47,18 @@ const menuOptions: MenuOption[] = [
     key: 'viewer',
     icon: renderIcon(BarChartOutline),
   },
+  {
+    label: '波形查看2',
+    key: 'canvas',
+    icon: renderIcon(BarChartOutline),
+  },
 ]
 
 const activeKey = computed(() => {
   const path = route.path
   if (path.startsWith('/upload')) return 'upload'
   if (path.startsWith('/viewer')) return 'viewer'
+  if (path.startsWith('/canvas')) return 'canvas'
   return 'upload'
 })
 

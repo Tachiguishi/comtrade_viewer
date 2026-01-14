@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -167,6 +168,7 @@ func main() {
 		id := c.Param("id")
 		dp := filepath.Join(dataRoot, id)
 		
+		lastTime := time.Now()
 		// Load parsed data
 		var meta comtrade.Metadata
 		var dat comtrade.ChannelData
@@ -181,6 +183,11 @@ func main() {
 		if b, err := os.ReadFile(dataPath); err == nil {
 			json.Unmarshal(b, &dat)
 		}
+
+		currentTime := time.Now()
+
+		fmt.Printf("Time taken to load cached files: %v\n", currentTime.Sub(lastTime))
+		lastTime = currentTime
 		
 		// If cache doesn't exist, parse now
 		if len(dat.Timestamps) == 0 {
