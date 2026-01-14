@@ -8,6 +8,7 @@
             <n-tag type="info" size="small">设备: {{ viewStore.relay }}</n-tag>
             <n-tag type="info" size="small">版本: {{ viewStore.version }}</n-tag>
             <n-tag type="info" size="small">数据类型: {{ viewStore.dataType.toUpperCase() }}</n-tag>
+            <n-tag type="info" size="small">采样点数量: {{ sampleCount }}</n-tag>
             <n-tag type="default" size="small">开始: {{ viewStore.startTime }}</n-tag>
             <n-tag type="default" size="small">结束: {{ viewStore.endTime }}</n-tag>
           </n-space>
@@ -41,6 +42,7 @@ const viewStore = useViewStore()
 const chartRef = ref<HTMLElement>()
 const chartInstance = shallowRef<echarts.ECharts>()
 const loading = ref(false)
+const sampleCount = ref(0)
 
 onMounted(() => {
   if (chartRef.value) {
@@ -80,6 +82,7 @@ async function refreshData() {
       viewStore.selectedDigitalChannels.length === 0)
   ) {
     chartInstance.value?.clear()
+    sampleCount.value = 0
     return
   }
 
@@ -98,6 +101,7 @@ async function refreshData() {
     //   return a.channel - b.channel
     // })
 
+    sampleCount.value = data.times.length
     const seriesCount = data.series.length
     const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
 
