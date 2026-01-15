@@ -123,14 +123,13 @@ func main() {
 			writeError(c, http.StatusBadRequest, "DAT_SAVE_FAILED", "保存数据文件失败", gin.H{"detail": err.Error()})
 			return
 		}
-		meta, dat, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
+		meta, err := comtrade.ParseComtradeCFGOnly(filepath.Join(dp, "cfg"))
 		if err != nil {
 			code, msg, details := toFriendlyParseError(err)
 			writeError(c, http.StatusBadRequest, code, msg, details)
 			return
 		}
 		_ = writeJSON(filepath.Join(dp, "meta.json"), meta)
-		_ = writeJSON(filepath.Join(dp, "data.json"), dat)
 		c.JSON(http.StatusOK, gin.H{"datasetId": datasetID, "name": datasetID})
 	})
 
@@ -156,7 +155,7 @@ func main() {
 				return
 			}
 		}
-		if m, _, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat")); err == nil {
+		if m, err := comtrade.ParseComtradeCFGOnly(filepath.Join(dp, "cfg")); err == nil {
 			c.JSON(http.StatusOK, m)
 			return
 		}
@@ -174,23 +173,20 @@ func main() {
 		var dat comtrade.ChannelData
 		
 		metaPath := filepath.Join(dp, "meta.json")
-		dataPath := filepath.Join(dp, "data.json")
-		
-		// Try to load from cache first
+
+		// // Try to load from cache first
 		if b, err := os.ReadFile(metaPath); err == nil {
 			json.Unmarshal(b, &meta)
-		}
-		if b, err := os.ReadFile(dataPath); err == nil {
-			json.Unmarshal(b, &dat)
-		}
 
-		currentTime := time.Now()
-
-		fmt.Printf("Time taken to load cached files: %v\n", currentTime.Sub(lastTime))
-		lastTime = currentTime
-		
-		// If cache doesn't exist, parse now
-		if len(dat.Timestamps) == 0 {
+			d, err := comtrade.ParseComtradeWithMetadata(filepath.Join(dp, "dat"), &meta)
+			if err != nil {
+				code, msg, details := toFriendlyParseError(err)
+				writeError(c, http.StatusInternalServerError, code, msg, details)
+				return
+			}
+			dat = *d
+		} else {
+			// If cache doesn't exist, parse now
 			m, d, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
 			if err != nil {
 				code, msg, details := toFriendlyParseError(err)
@@ -200,6 +196,10 @@ func main() {
 			meta = *m
 			dat = *d
 		}
+
+		currentTime := time.Now()
+
+		fmt.Printf("Time taken to load cached files: %v\n", currentTime.Sub(lastTime))
 
 		if len(dat.Timestamps) == 0 {
 			writeError(c, http.StatusInternalServerError, "NO_DATA", "未找到通道数据", gin.H{"id": id})
