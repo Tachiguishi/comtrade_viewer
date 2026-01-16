@@ -107,8 +107,18 @@ async function refreshData() {
       viewStore.selectedDigitalChannels,
     )
 
+    // 规范化数字通道数据：确保值只有0和1
+    const normalizedSeries = data.series.map((s) => {
+      if (s.type === 'digital') {
+        // 对于数字通道，规范化值为0或1
+        const normalizedY = s.y.map((val) => (val !== 0 ? 1 : 0))
+        return { ...s, y: normalizedY }
+      }
+      return s
+    })
+
     // sampleCount.value = data.times.length
-    const seriesCount = data.series.length
+    const seriesCount = normalizedSeries.length
     const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
 
     sampleCount.value = data.downsample.originalPoints
@@ -120,14 +130,14 @@ async function refreshData() {
     const LEFT_MARGIN_PX = 50
     const RIGHT_MARGIN_PX = 30
 
-    const grids = data.series.map((_, i) => ({
+    const grids = normalizedSeries.map((_, i) => ({
       left: LEFT_MARGIN_PX,
       right: RIGHT_MARGIN_PX,
       top: `${topMarginPct + i * perGridPct}%`,
       height: `${perGridPct - 4}%`,
     }))
 
-    const xAxes = data.series.map((_, i) => ({
+    const xAxes = normalizedSeries.map((_, i) => ({
       min: data.window.start,
       max: data.window.end,
       gridIndex: i,
@@ -139,26 +149,54 @@ async function refreshData() {
       splitLine: { show: true },
     }))
 
-    const yAxes = data.series.map((s, i) => ({
-      scale: true,
-      gridIndex: i,
-      name: s.unit ? `${s.name} (${s.unit})` : s.name,
-      nameTextStyle: {
-        align: 'left' as const,
-        padding: [0, 0, -20, -LEFT_MARGIN_PX],
-      },
-      axisLabel: {
-        show: true,
-      },
-      splitLine: { show: true },
-    }))
+    const yAxes = normalizedSeries.map((s, i) => {
+      const isDigital = s.type === 'digital'
+      const yAxisConfig: Record<string, unknown> = {
+        scale: !isDigital, // 开关量不使用自动缩放
+        gridIndex: i,
+        name: s.unit ? `${s.name} (${s.unit})` : s.name,
+        nameTextStyle: {
+          align: 'left' as const,
+          padding: [0, 0, -5, -LEFT_MARGIN_PX],
+        },
+        axisLabel: {
+          show: true,
+        },
+        splitLine: { show: true },
+      }
+
+      // 为开关量配置Y轴：只显示0和1
+      if (isDigital) {
+        yAxisConfig.min = -0.1
+        yAxisConfig.max = 1.1
+        yAxisConfig.type = 'value'
+        yAxisConfig.axisLabel = {
+          formatter: (value: number) => {
+            if (value === 0) return '0'
+            if (value === 1) return '1'
+            return ''
+          },
+          interval: 1,
+          showMinLabel: true,
+          showMaxLabel: true,
+        }
+        yAxisConfig.splitLine = { show: false }
+        yAxisConfig.axisTick = {
+          show: true,
+          interval: 1,
+          length: 3,
+        }
+      }
+
+      return yAxisConfig
+    })
 
     // 获取图表容器宽度
     const DEFAULT_CHART_WIDTH = 800
     const chartWidth = chartRef.value?.clientWidth || DEFAULT_CHART_WIDTH
 
     // 为每个子图添加底部边框线
-    const graphicElements = data.series.flatMap((_, i) => {
+    const graphicElements = normalizedSeries.flatMap((_, i) => {
       const bottomY = `${topMarginPct + (i + 1) * perGridPct - 4}%`
 
       return [
@@ -197,11 +235,11 @@ async function refreshData() {
           },
         },
         formatter: function (params) {
-          // 根据data.series中的顺序排序显示
+          // 根据normalizedSeries中的顺序排序显示
           const sortedParams = Array.isArray(params)
             ? params.slice().sort((a, b) => {
-                const seriesA = data.series.findIndex((s) => s.name === a.seriesName)
-                const seriesB = data.series.findIndex((s) => s.name === b.seriesName)
+                const seriesA = normalizedSeries.findIndex((s) => s.name === a.seriesName)
+                const seriesB = normalizedSeries.findIndex((s) => s.name === b.seriesName)
                 return seriesA - seriesB
               })
             : []
@@ -228,15 +266,25 @@ async function refreshData() {
       xAxis: xAxes,
       yAxis: yAxes,
       graphic: graphicElements,
-      series: data.series.map((s, i) => ({
-        name: s.name,
-        type: 'line',
-        showSymbol: false,
-        xAxisIndex: i,
-        yAxisIndex: i,
-        data: s.y.map((y, k) => [s.times[k], y]),
-        animation: false,
-      })),
+      series: normalizedSeries.map((s, i) => {
+        // 根据通道类型选择不同的渲染方式
+        const isDigital = s.type === 'digital'
+
+        return {
+          name: s.name,
+          type: 'line',
+          step: isDigital ? 'start' : false, // 开关量使用阶梯图
+          showSymbol: false,
+          xAxisIndex: i,
+          yAxisIndex: i,
+          data: s.y.map((y, k) => [s.times[k], y]),
+          animation: false,
+          smooth: isDigital ? false : true, // 只给模拟量平滑处理
+          lineStyle: {
+            type: isDigital ? 'solid' : 'solid',
+          },
+        }
+      }),
       dataZoom: [
         {
           type: 'inside',
