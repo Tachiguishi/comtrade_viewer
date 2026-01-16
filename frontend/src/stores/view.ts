@@ -4,24 +4,8 @@ export const useViewStore = defineStore('view', {
   state: () => ({
     selectedAnalogChannels: [] as string[],
     selectedDigitalChannels: [] as string[],
-    station: '',
-    relay: '',
-    version: '',
-    dataType: '',
-    startTime: '',
-    endTime: '',
   }),
   actions: {
-    setMetaData(station: string, relay: string, version: string, dataType: string) {
-      this.station = station
-      this.relay = relay
-      this.version = version
-      this.dataType = dataType
-    },
-    setTimeRange(start: string, end: string) {
-      this.startTime = start
-      this.endTime = end
-    },
     clearChannelSelection() {
       this.selectedAnalogChannels = []
       this.selectedDigitalChannels = []

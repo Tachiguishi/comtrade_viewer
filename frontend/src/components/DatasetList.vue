@@ -51,16 +51,8 @@ async function select(id: string) {
   viewStore.clearChannelSelection()
   await datasetStore.loadMetadata(id)
   if (datasetStore.metadata) {
-    viewStore.setMetaData(
-      datasetStore.metadata.station,
-      datasetStore.metadata.relay,
-      datasetStore.metadata.version,
-      datasetStore.metadata.dataFileType,
-    )
-    viewStore.setTimeRange(datasetStore.metadata.startTime, datasetStore.metadata.endTime)
-
     if (viewStore.selectedAnalogChannels.length === 0) {
-      const defaults = datasetStore.metadata.analogChannels.slice(0, 3).map((c) => c.id)
+      const defaults = datasetStore.metadata.analogChannels.slice(0, 6).map((c) => c.id)
       viewStore.setAnalogChannels(defaults)
     }
   }

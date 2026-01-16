@@ -4,13 +4,26 @@
       <template #header>
         <n-space align="center" justify="space-between">
           <n-space :size="14" wrap>
-            <n-tag type="info" size="small">站点: {{ viewStore.station }}</n-tag>
-            <n-tag type="info" size="small">设备: {{ viewStore.relay }}</n-tag>
-            <n-tag type="info" size="small">版本: {{ viewStore.version }}</n-tag>
-            <n-tag type="info" size="small">数据类型: {{ viewStore.dataType.toUpperCase() }}</n-tag>
-            <n-tag type="info" size="small">采样点数量: {{ sampleCount }}</n-tag>
-            <n-tag type="default" size="small">开始: {{ viewStore.startTime }}</n-tag>
-            <n-tag type="default" size="small">结束: {{ viewStore.endTime }}</n-tag>
+            <n-tag type="info" size="small">站点: {{ datasetStore.metadata?.station }}</n-tag>
+            <n-tag type="info" size="small">设备: {{ datasetStore.metadata?.relay }}</n-tag>
+            <n-tag type="info" size="small">版本: {{ datasetStore.metadata?.version }}</n-tag>
+            <n-tag type="info" size="small"
+              >数据类型: {{ datasetStore.metadata?.dataFileType.toUpperCase() }}</n-tag
+            >
+            <n-tag type="info" size="small"
+              >额定频率: {{ datasetStore.metadata?.frequency }}Hz</n-tag
+            >
+            <n-tooltip v-if="datasetStore.metadata?.sampleRates" placement="bottom">
+              <template #trigger>
+                <n-tag type="info" size="small">采样数量: {{ sampleCount }}</n-tag>
+              </template>
+              <div>
+                <div v-for="(rate, idx) in datasetStore.metadata.sampleRates" :key="idx">
+                  {{ rate.sampRate }}Hz -> {{ rate.lastSampleNum }}
+                </div>
+              </div>
+            </n-tooltip>
+            <n-tag type="default" size="small">开始: {{ datasetStore.metadata?.startTime }}</n-tag>
           </n-space>
           <n-button type="primary" @click="refreshData" :loading="loading"> 刷新视图 </n-button>
         </n-space>

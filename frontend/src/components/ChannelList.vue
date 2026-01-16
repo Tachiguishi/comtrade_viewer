@@ -33,12 +33,12 @@
                 <div>
                   <div>相位: {{ ch.phase || '-' }}</div>
                   <div>CCBM: {{ ch.ccbm || '-' }}</div>
-                  <div>乘数: {{ ch.multiplier }}</div>
-                  <div>偏移: {{ ch.offset }}</div>
-                  <div>倾斜: {{ ch.skew }}</div>
+                  <div>a: {{ ch.multiplier }}</div>
+                  <div>b: {{ ch.offset }}</div>
+                  <div>时间偏移: {{ ch.skew }}</div>
                   <div>范围: [{{ ch.minValue }}, {{ ch.maxValue }}]</div>
                   <div>一次/二次: {{ ch.primary }}/{{ ch.secondary }}</div>
-                  <div>PorS: {{ ch.ps }}</div>
+                  <div>PS: {{ ch.ps }}</div>
                 </div>
               </n-tooltip>
             </n-checkbox>
