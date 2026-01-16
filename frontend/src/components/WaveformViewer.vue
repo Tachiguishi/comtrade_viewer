@@ -101,18 +101,11 @@ async function refreshData() {
 
   loading.value = true
   try {
-    const data = await getWaveforms(datasetStore.currentId, [
-      ...viewStore.selectedAnalogChannels,
-      ...viewStore.selectedDigitalChannels,
-    ])
-
-    // sort series by channel type and number
-    // data.series.sort((a, b) => {
-    //   const typeA = a.type === 'analog' ? 0 : 1
-    //   const typeB = b.type === 'analog' ? 0 : 1
-    //   if (typeA !== typeB) return typeA - typeB
-    //   return a.channel - b.channel
-    // })
+    const data = await getWaveforms(
+      datasetStore.currentId,
+      viewStore.selectedAnalogChannels,
+      viewStore.selectedDigitalChannels,
+    )
 
     // sampleCount.value = data.times.length
     const seriesCount = data.series.length

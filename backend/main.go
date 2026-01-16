@@ -223,12 +223,46 @@ func main() {
 		}
 
 		// Parse requested channels
-		chsStr := c.Query("channels")
-		if chsStr == "" {
-			writeError(c, http.StatusBadRequest, "CHANNELS_REQUIRED", "缺少channels参数", gin.H{"format": "A1,A2,D1,..."})
+		analogChsStr := c.Query("A")
+		analogChannels := make([]int, 0)
+		if analogChsStr != "" {
+			chs := strings.SplitSeq(analogChsStr, ",")
+			for chID := range chs {
+				chID = strings.TrimSpace(chID)
+				if chID == "" {
+					continue
+				}
+				chNum, err := strconv.Atoi(chID)
+				if err != nil {
+					continue
+				}
+				analogChannels = append(analogChannels, chNum)
+			}
+			sort.Ints(analogChannels)
+		}
+
+		digitalChsStr := c.Query("D")
+		digitalChannels := make([]int, 0)
+		if digitalChsStr != "" {
+			chs := strings.SplitSeq(digitalChsStr, ",")
+			for chID := range chs {
+				chID = strings.TrimSpace(chID)
+				if chID == "" {
+					continue
+				}
+				chNum, err := strconv.Atoi(chID)
+				if err != nil {
+					continue
+				}
+				digitalChannels = append(digitalChannels, chNum)
+			}
+			sort.Ints(digitalChannels)
+		}
+
+		if len(analogChannels) == 0 && len(digitalChannels) == 0 {
+			writeError(c, http.StatusBadRequest, "NO_CHANNELS_SPECIFIED", "no channel specified", gin.H{"hint": "请通过查询参数A和D指定所需的模拟和数字通道, 例如?A=1,2,3&D=1,2"})
 			return
 		}
-		chs := strings.Split(chsStr, ",")
 
 		// Parse downsampling parameters
 		targetPoints := 5000 // default
@@ -255,38 +289,9 @@ func main() {
 		}
 
 		// Build series response
-		series := make([]map[string]any, 0, len(chs))
+		series := make([]map[string]any, 0, len(analogChannels)+len(digitalChannels))
 
-		analogChannels := make([]int, 0)
-		digitalChannels := make([]int, 0)
-		for _, chID := range chs {
-			chID = strings.TrimSpace(chID)
-			if chID == "" {
-				continue
-			}
-
-			// Check if it's analog (A1, A2, etc) or digital (D1, D2, etc)
-			if after, ok := strings.CutPrefix(chID, "A"); ok {
-				// Analog channel
-				chNum, err := strconv.Atoi(after)
-				if err != nil {
-					continue
-				}
-
-				analogChannels = append(analogChannels, chNum)
-			} else if after0, ok0 := strings.CutPrefix(chID, "D"); ok0 {
-				// Digital channel
-				chNum, err := strconv.Atoi(after0)
-				if err != nil {
-					continue
-				}
-
-				digitalChannels = append(digitalChannels, chNum)
-			}
-		}
-
-		sort.Ints(analogChannels)
-		sort.Ints(digitalChannels)
+		
 
 		// Find the channel data
 		for _, chData := range dat.AnalogChannels {

@@ -2,8 +2,8 @@ import { defineStore } from 'pinia'
 
 export const useViewStore = defineStore('view', {
   state: () => ({
-    selectedAnalogChannels: [] as string[],
-    selectedDigitalChannels: [] as string[],
+    selectedAnalogChannels: [] as number[],
+    selectedDigitalChannels: [] as number[],
   }),
   actions: {
     clearChannelSelection() {
@@ -11,22 +11,20 @@ export const useViewStore = defineStore('view', {
       this.selectedDigitalChannels = []
     },
     toggleAnalogChannel(id: number) {
-      const analogId = 'A' + id.toString()
-      const idx = this.selectedAnalogChannels.indexOf(analogId)
+      const idx = this.selectedAnalogChannels.indexOf(id)
       if (idx >= 0) this.selectedAnalogChannels.splice(idx, 1)
-      else this.selectedAnalogChannels.push(analogId)
+      else this.selectedAnalogChannels.push(id)
     },
     setAnalogChannels(ids: number[]) {
-      this.selectedAnalogChannels = ids.map((id) => 'A' + id.toString())
+      this.selectedAnalogChannels = ids
     },
     toggleDigitalChannel(id: number) {
-      const digitalId = 'D' + id.toString()
-      const idx = this.selectedDigitalChannels.indexOf(digitalId)
+      const idx = this.selectedDigitalChannels.indexOf(id)
       if (idx >= 0) this.selectedDigitalChannels.splice(idx, 1)
-      else this.selectedDigitalChannels.push(digitalId)
+      else this.selectedDigitalChannels.push(id)
     },
     setDigitalChannels(ids: number[]) {
-      this.selectedDigitalChannels = ids.map((id) => 'D' + id.toString())
+      this.selectedDigitalChannels = ids
     },
   },
 })

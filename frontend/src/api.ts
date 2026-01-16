@@ -61,9 +61,14 @@ export async function getMetadata(id: string) {
   return data
 }
 
-export async function getWaveforms(id: string, channels: string[]) {
+export async function getWaveforms(
+  id: string,
+  analogChannels: number[],
+  digitalChannels: number[],
+) {
   const params = new URLSearchParams({
-    channels: channels.join(','),
+    A: analogChannels.join(','),
+    D: digitalChannels.join(','),
   })
   const { data } = await api.get(`/datasets/${id}/waveforms`, { params })
   return data as {

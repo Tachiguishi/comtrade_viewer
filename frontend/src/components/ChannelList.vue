@@ -20,7 +20,7 @@
             <n-checkbox
               v-for="ch in filteredAnalogChannels"
               :key="ch.id"
-              :checked="viewStore.selectedAnalogChannels.includes('A' + ch.id.toString())"
+              :checked="viewStore.selectedAnalogChannels.includes(ch.id)"
               @update:checked="() => viewStore.toggleAnalogChannel(ch.id)"
             >
               <n-tooltip :delay="500">
@@ -62,7 +62,7 @@
             <n-checkbox
               v-for="ch in filteredDigitalChannels"
               :key="ch.id"
-              :checked="viewStore.selectedDigitalChannels.includes('D' + ch.id.toString())"
+              :checked="viewStore.selectedDigitalChannels.includes(ch.id)"
               @update:checked="() => viewStore.toggleDigitalChannel(ch.id)"
             >
               <n-tooltip :delay="500">
