@@ -251,6 +251,7 @@ func main() {
 			needDownsample = len(timestamps) > targetPoints
 		case "none":
 			needDownsample = false
+			downsampleMethod = "none"
 		}
 
 		// Build series response
@@ -395,12 +396,10 @@ func main() {
 			"window": map[string]float32{"start": timestamps[0], "end": timestamps[len(timestamps)-1]},
 		}
 
-		if needDownsample {
-			response["downsample"] = map[string]any{
-				"method":         downsampleMethod,
-				"targetPoints":   targetPoints,
-				"originalPoints": len(timestamps),
-			}
+		response["downsample"] = map[string]any{
+			"method":         downsampleMethod,
+			"targetPoints":   targetPoints,
+			"originalPoints": len(timestamps),
 		}
 
 		c.JSON(http.StatusOK, response)

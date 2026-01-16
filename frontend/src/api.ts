@@ -77,6 +77,7 @@ export async function getWaveforms(id: string, channels: string[]) {
     }[]
     times: number[]
     window: { start: number; end: number }
+    downsample: { method: string; targetPoints: number; originalPoints: number }
   }
 }
 

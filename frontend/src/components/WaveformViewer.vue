@@ -105,13 +105,13 @@ async function refreshData() {
     const seriesCount = data.series.length
     const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
 
-    sampleCount.value = data.series.reduce((max, s) => Math.max(max, s.y.length), 0)
+    sampleCount.value = data.downsample.originalPoints
 
     // 预留顶部/底部空间给标题/缩放器，按百分比垂直堆叠各 grid
     const plotAreaPct = 95 // 95% 高度作为绘图区
     const topMarginPct = 4
     const perGridPct = plotAreaPct / Math.max(seriesCount, 1)
-    const LEFT_MARGIN_PX = 60
+    const LEFT_MARGIN_PX = 50
     const RIGHT_MARGIN_PX = 30
 
     const grids = data.series.map((_, i) => ({
@@ -139,7 +139,7 @@ async function refreshData() {
       name: s.unit ? `${s.name} (${s.unit})` : s.name,
       nameTextStyle: {
         align: 'left' as const,
-        padding: [0, 0, 0, -LEFT_MARGIN_PX],
+        padding: [0, 0, -20, -LEFT_MARGIN_PX],
       },
       axisLabel: {
         show: true,
