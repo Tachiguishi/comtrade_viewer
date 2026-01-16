@@ -10,29 +10,29 @@ import (
 )
 
 type Metadata struct {
-	Station           string `json:"station"`
-	Relay             string `json:"relay"`
-	Version           string `json:"version"`
-	TotalChannelNum   int    `json:"totalChannelNum"`
-	AnalogChannelNum  int    `json:"analogChannelNum"`
-	DigitalChannelNum int    `json:"digitalChannelNum"`
-	AnalogChannels    []AnalogChannel `json:"analogChannels"`
+	Station           string           `json:"station"`
+	Relay             string           `json:"relay"`
+	Version           string           `json:"version"`
+	TotalChannelNum   int              `json:"totalChannelNum"`
+	AnalogChannelNum  int              `json:"analogChannelNum"`
+	DigitalChannelNum int              `json:"digitalChannelNum"`
+	AnalogChannels    []AnalogChannel  `json:"analogChannels"`
 	DigitalChannels   []DigitalChannel `json:"digitalChannels"`
-	Frequency         float64 `json:"frequency"`
-	RatesNum          int     `json:"ratesNum"`
-	SampleRates       []SampleRate `json:"sampleRates"`
-	StartTime         time.Time `json:"startTime"`
-	EndTime           time.Time `json:"endTime"`
-	DataFileType      string `json:"dataFileType"`
-	TimeMultiplier    float64 `json:"timeMultiplier"`
+	Frequency         float64          `json:"frequency"`
+	RatesNum          int              `json:"ratesNum"`
+	SampleRates       []SampleRate     `json:"sampleRates"`
+	StartTime         time.Time        `json:"startTime"`
+	EndTime           time.Time        `json:"endTime"`
+	DataFileType      string           `json:"dataFileType"`
+	TimeMultiplier    float64          `json:"timeMultiplier"`
 }
 
 type AnalogChannel struct {
-	ChannelNumber int `json:"id"`
-	ChannelName   string `json:"name"`
-	Phase         string `json:"phase"`
-	CCBM          string `json:"ccbm"`
-	Unit          string `json:"unit"`
+	ChannelNumber int     `json:"id"`
+	ChannelName   string  `json:"name"`
+	Phase         string  `json:"phase"`
+	CCBM          string  `json:"ccbm"`
+	Unit          string  `json:"unit"`
 	Multiplier    float64 `json:"multiplier"`
 	Offset        float64 `json:"offset"`
 	Skew          float64 `json:"skew"`
@@ -40,11 +40,11 @@ type AnalogChannel struct {
 	MaxValue      float64 `json:"maxValue"`
 	Primary       float64 `json:"primary"`
 	Secondary     float64 `json:"secondary"`
-	PS            string `json:"ps"`
+	PS            string  `json:"ps"`
 }
 
 type DigitalChannel struct {
-	ChannelNumber int `json:"id"`
+	ChannelNumber int    `json:"id"`
 	ChannelName   string `json:"name"`
 	Phase         string `json:"phase"`
 	CCBM          string `json:"ccbm"`
@@ -61,7 +61,7 @@ func newMetadata() *Metadata {
 		AnalogChannels:  make([]AnalogChannel, 0),
 		DigitalChannels: make([]DigitalChannel, 0),
 		SampleRates:     make([]SampleRate, 0),
-		TimeMultiplier:  1.0,	// default to 1.0 (version 1991 does not have this field)
+		TimeMultiplier:  1.0, // default to 1.0 (version 1991 does not have this field)
 	}
 }
 
@@ -244,7 +244,7 @@ version 1991: 1,Feeder 01,0
 */
 func parseDigitalChannelLine(parser *cfgParser, line string) error {
 	parts := splitAndTrim(line, ",")
-	
+
 	if parser.cfg.Version == "1991" {
 		// 1991 version has fewer fields
 		if len(parts) < 3 {

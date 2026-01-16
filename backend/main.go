@@ -84,6 +84,9 @@ func main() {
 	dataRoot := filepath.Join(".", "data")
 	_ = ensureDir(dataRoot)
 
+	// Initialize LRU cache: keep last 10 datasets in memory
+	cache := comtrade.NewDatasetCache(10)
+
 	// Upload
 	r.POST("/api/datasets/import", func(c *gin.Context) {
 		if err := c.Request.ParseMultipartForm(256 << 20); err != nil {
@@ -162,50 +165,63 @@ func main() {
 		writeError(c, http.StatusNotFound, "METADATA_NOT_FOUND", "未找到元数据", gin.H{"id": id})
 	})
 
-	// Waveforms (real data from parsed ComTrade)
+	// Waveforms (real data from parsed ComTrade with optimization)
 	r.GET("/api/datasets/:id/waveforms", func(c *gin.Context) {
 		id := c.Param("id")
 		dp := filepath.Join(dataRoot, id)
-		
+
 		lastTime := time.Now()
-		// Load parsed data
-		var meta comtrade.Metadata
-		var dat comtrade.ChannelData
-		
-		metaPath := filepath.Join(dp, "meta.json")
 
-		// // Try to load from cache first
-		if b, err := os.ReadFile(metaPath); err == nil {
-			json.Unmarshal(b, &meta)
+		// Try to load from memory cache first
+		var meta *comtrade.Metadata
+		var dat *comtrade.ChannelData
 
-			d, err := comtrade.ParseComtradeWithMetadata(filepath.Join(dp, "dat"), &meta)
-			if err != nil {
-				code, msg, details := toFriendlyParseError(err)
-				writeError(c, http.StatusInternalServerError, code, msg, details)
-				return
-			}
-			dat = *d
+		if cachedMeta, cachedDat, ok := cache.Get(id); ok {
+			meta = cachedMeta
+			dat = cachedDat
+			fmt.Printf("Cache hit for dataset %s\n", id)
 		} else {
-			// If cache doesn't exist, parse now
-			m, d, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
-			if err != nil {
-				code, msg, details := toFriendlyParseError(err)
-				writeError(c, http.StatusInternalServerError, code, msg, details)
-				return
+			fmt.Printf("Cache miss for dataset %s, parsing from disk\n", id)
+
+			var metaResult *comtrade.Metadata
+			var datResult *comtrade.ChannelData
+
+			metaPath := filepath.Join(dp, "meta.json")
+
+			// Try to load from file cache first (meta.json)
+			if b, err := os.ReadFile(metaPath); err == nil {
+				json.Unmarshal(b, &metaResult)
+				datResult, err = comtrade.ParseComtradeWithMetadata(filepath.Join(dp, "dat"), metaResult)
+				if err == nil {
+					meta = metaResult
+					dat = datResult
+				}
 			}
-			meta = *m
-			dat = *d
+
+			// If file cache didn't work, parse from scratch
+			if meta == nil || dat == nil {
+				m, d, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
+				if err != nil {
+					code, msg, details := toFriendlyParseError(err)
+					writeError(c, http.StatusInternalServerError, code, msg, details)
+					return
+				}
+				meta = m
+				dat = d
+			}
+
+			// Store in memory cache for future requests
+			cache.Set(id, meta, dat)
 		}
 
 		currentTime := time.Now()
-
-		fmt.Printf("Time taken to load cached files: %v\n", currentTime.Sub(lastTime))
+		fmt.Printf("Time taken to load data: %v\n", currentTime.Sub(lastTime))
 
 		if len(dat.Timestamps) == 0 {
 			writeError(c, http.StatusInternalServerError, "NO_DATA", "未找到通道数据", gin.H{"id": id})
 			return
 		}
-		
+
 		// Parse requested channels
 		chsStr := c.Query("channels")
 		if chsStr == "" {
@@ -213,10 +229,32 @@ func main() {
 			return
 		}
 		chs := strings.Split(chsStr, ",")
-		
+
+		// Parse downsampling parameters
+		targetPoints := 5000 // default
+		if tp := c.Query("targetPoints"); tp != "" {
+			if v, err := strconv.Atoi(tp); err == nil && v > 0 {
+				targetPoints = v
+			}
+		}
+		downsampleMethod := c.DefaultQuery("downsample", "auto") // auto, none, lttb, minmax
+
+		// Compute time axis
+		timestamps := comtrade.ComputeTimeAxisFromMeta(*meta, dat.Timestamps, len(dat.Timestamps))
+
+		// Determine if downsampling is needed
+		needDownsample := false
+		switch downsampleMethod {
+		case "auto":
+			needDownsample = len(timestamps) > targetPoints*2
+		case "lttb", "minmax":
+			needDownsample = len(timestamps) > targetPoints
+		case "none":
+			needDownsample = false
+		}
+
 		// Build series response
 		series := make([]map[string]any, 0, len(chs))
-		timestamps := comtrade.ComputeTimeAxisFromMeta(meta, dat.Timestamps, len(dat.Timestamps))
 
 		analogChannels := make([]int, 0)
 		digitalChannels := make([]int, 0)
@@ -225,9 +263,9 @@ func main() {
 			if chID == "" {
 				continue
 			}
-			
+
 			// Check if it's analog (A1, A2, etc) or digital (D1, D2, etc)
-			if after, ok :=strings.CutPrefix(chID, "A"); ok  {
+			if after, ok := strings.CutPrefix(chID, "A"); ok {
 				// Analog channel
 				chNum, err := strconv.Atoi(after)
 				if err != nil {
@@ -235,7 +273,7 @@ func main() {
 				}
 
 				analogChannels = append(analogChannels, chNum)
-			} else if after0, ok0 :=strings.CutPrefix(chID, "D"); ok0  {
+			} else if after0, ok0 := strings.CutPrefix(chID, "D"); ok0 {
 				// Digital channel
 				chNum, err := strconv.Atoi(after0)
 				if err != nil {
@@ -280,14 +318,14 @@ func main() {
 				multiplier = ch.Multiplier
 				offset = ch.Offset
 			}
-			
+
 			if len(chData.RawDataFloat) == sampleLen {
 				// Use float data if available
 				for i, d := range chData.RawDataFloat {
 					// Apply scaling: physical_value = raw * multiplier + offset
 					y[i] = float64(d)*multiplier + offset
 				}
-			} else  {
+			} else {
 				// Fallback to int data
 				for i, d := range chData.RawData {
 					// Apply scaling: physical_value = raw * multiplier + offset
@@ -295,12 +333,20 @@ func main() {
 				}
 			}
 
+			// Apply downsampling for analog channels
+			returnTimes := timestamps
+			returnY := y
+			if needDownsample {
+				returnTimes, returnY = comtrade.DownsampleLTTB(timestamps, y, targetPoints)
+			}
+
 			series = append(series, map[string]any{
 				"channel": chNum,
-				"type":   "analog",
+				"type":    "analog",
 				"name":    meta.AnalogChannels[chNum-1].ChannelName,
 				"unit":    meta.AnalogChannels[chNum-1].Unit,
-				"y":       y,
+				"times":   returnTimes,
+				"y":       returnY,
 			})
 		}
 
@@ -327,20 +373,37 @@ func main() {
 			y := make([]int8, sampleLen)
 
 			copy(y, chData.RawData)
-			
+
+			// Apply downsampling for digital channels
+			returnTimes := timestamps
+			returnY := y
+			if needDownsample {
+				returnTimes, returnY = comtrade.DownsampleDigital(timestamps, y)
+			}
+
 			series = append(series, map[string]any{
 				"channel": chNum,
-				"type":   "digital",
+				"type":    "digital",
 				"name":    meta.DigitalChannels[chNum-1].ChannelName,
-				"y":       y,
+				"times":   returnTimes,
+				"y":       returnY,
 			})
 		}
-		
-		c.JSON(http.StatusOK, gin.H{
+
+		response := gin.H{
 			"series": series,
-			"times":   timestamps,
 			"window": map[string]float32{"start": timestamps[0], "end": timestamps[len(timestamps)-1]},
-		})
+		}
+
+		if needDownsample {
+			response["downsample"] = map[string]any{
+				"method":         downsampleMethod,
+				"targetPoints":   targetPoints,
+				"originalPoints": len(timestamps),
+			}
+		}
+
+		c.JSON(http.StatusOK, response)
 	})
 
 	// Annotations (file-backed JSON)

@@ -8,19 +8,19 @@ import (
 )
 
 type AnalogChannelData struct {
-	ChannelNumber int `json:"channel"`
-	RawData          []int32 `json:"rawData"`
-	RawDataFloat     []float32 `json:"rawDataFloat"`
+	ChannelNumber int       `json:"channel"`
+	RawData       []int32   `json:"rawData"`
+	RawDataFloat  []float32 `json:"rawDataFloat"`
 }
 
 type DigitalChannelData struct {
-	ChannelNumber int `json:"channel"`
-	RawData          []int8 `json:"rawData"`
+	ChannelNumber int    `json:"channel"`
+	RawData       []int8 `json:"rawData"`
 }
 
 type ChannelData struct {
-	Timestamps      []uint32 `json:"timestamps"`
-	AnalogChannels  []AnalogChannelData `json:"analogChannels"`
+	Timestamps      []uint32             `json:"timestamps"`
+	AnalogChannels  []AnalogChannelData  `json:"analogChannels"`
 	DigitalChannels []DigitalChannelData `json:"digitalChannels"`
 }
 
@@ -45,7 +45,7 @@ func (dat *ChannelData) AddAnalogData(channelNumber int, value int32) {
 	}
 	dat.AnalogChannels = append(dat.AnalogChannels, AnalogChannelData{
 		ChannelNumber: channelNumber,
-		RawData: []int32{value},
+		RawData:       []int32{value},
 	})
 }
 
@@ -58,7 +58,7 @@ func (dat *ChannelData) AddAnalogDataFloat(channelNumber int, value float32) {
 	}
 	dat.AnalogChannels = append(dat.AnalogChannels, AnalogChannelData{
 		ChannelNumber: channelNumber,
-		RawDataFloat: []float32{value},
+		RawDataFloat:  []float32{value},
 	})
 }
 
@@ -71,7 +71,7 @@ func (dat *ChannelData) AddDigitalData(channelNumber int, value int8) {
 	}
 	dat.DigitalChannels = append(dat.DigitalChannels, DigitalChannelData{
 		ChannelNumber: channelNumber,
-		RawData: []int8{value},
+		RawData:       []int8{value},
 	})
 }
 

@@ -101,9 +101,11 @@ async function refreshData() {
     //   return a.channel - b.channel
     // })
 
-    sampleCount.value = data.times.length
+    // sampleCount.value = data.times.length
     const seriesCount = data.series.length
     const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
+
+    sampleCount.value = data.series.reduce((max, s) => Math.max(max, s.y.length), 0)
 
     // 预留顶部/底部空间给标题/缩放器，按百分比垂直堆叠各 grid
     const plotAreaPct = 95 // 95% 高度作为绘图区
@@ -226,7 +228,7 @@ async function refreshData() {
         showSymbol: false,
         xAxisIndex: i,
         yAxisIndex: i,
-        data: s.y.map((y, k) => [data.times[k], y]),
+        data: s.y.map((y, k) => [s.times[k], y]),
         animation: false,
       })),
       dataZoom: [
