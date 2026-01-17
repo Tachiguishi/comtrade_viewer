@@ -15,6 +15,7 @@ import (
 
 	"comtradeviewer/comtrade"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 )
 
@@ -166,7 +167,7 @@ func main() {
 	})
 
 	// Waveforms (real data from parsed ComTrade with optimization)
-	r.GET("/api/datasets/:id/waveforms", func(c *gin.Context) {
+	r.GET("/api/datasets/:id/waveforms", gzip.Gzip(gzip.BestCompression), func(c *gin.Context) {
 		id := c.Param("id")
 		dp := filepath.Join(dataRoot, id)
 
