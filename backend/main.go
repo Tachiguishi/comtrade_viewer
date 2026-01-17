@@ -276,13 +276,45 @@ func main() {
 		// Compute time axis
 		timestamps := comtrade.ComputeTimeAxisFromMeta(*meta, dat.Timestamps, len(dat.Timestamps))
 
+		// Parse time range parameters (for zoomed view)
+		startTime := timestamps[0]
+		endTime := timestamps[len(timestamps)-1]
+		if st := c.Query("startTime"); st != "" {
+			if v, err := strconv.ParseFloat(st, 32); err == nil {
+				startTime = float32(v)
+			}
+		}
+		if et := c.Query("endTime"); et != "" {
+			if v, err := strconv.ParseFloat(et, 32); err == nil {
+				endTime = float32(v)
+			}
+		}
+
+		// Filter data by time range if specified
+		var filteredTimestamps []float32
+		var timeIndices []int
+		if startTime != 0 && endTime != 0 && startTime < endTime {
+			for i, t := range timestamps {
+				if t >= startTime && t <= endTime {
+					timeIndices = append(timeIndices, i)
+					filteredTimestamps = append(filteredTimestamps, t)
+				}
+			}
+		} else {
+			filteredTimestamps = timestamps
+			timeIndices = make([]int, len(timestamps))
+			for i := range timestamps {
+				timeIndices[i] = i
+			}
+		}
+
 		// Determine if downsampling is needed
 		needDownsample := false
 		switch downsampleMethod {
 		case "auto":
-			needDownsample = len(timestamps) > targetPoints*2
+			needDownsample = len(filteredTimestamps) > targetPoints*2
 		case "lttb", "minmax":
-			needDownsample = len(timestamps) > targetPoints
+			needDownsample = len(filteredTimestamps) > targetPoints
 		case "none":
 			needDownsample = false
 			downsampleMethod = "none"
@@ -339,11 +371,19 @@ func main() {
 				}
 			}
 
+			// Extract data for the specified time range
+			var rangeTimestamps []float32
+			var rangeY []float64
+			for _, idx := range timeIndices {
+				rangeTimestamps = append(rangeTimestamps, timestamps[idx])
+				rangeY = append(rangeY, y[idx])
+			}
+
 			// Apply downsampling for analog channels
-			returnTimes := timestamps
-			returnY := y
-			if needDownsample {
-				returnTimes, returnY = comtrade.DownsampleLTTB(timestamps, y, targetPoints)
+			returnTimes := rangeTimestamps
+			returnY := rangeY
+			if needDownsample && len(rangeTimestamps) > 0 {
+				returnTimes, returnY = comtrade.DownsampleLTTB(rangeTimestamps, rangeY, targetPoints)
 			}
 
 			series = append(series, map[string]any{
@@ -380,11 +420,21 @@ func main() {
 
 			copy(y, chData.RawData)
 
+			// Extract data for the specified time range
+			var rangeTimestamps []float32
+			var rangeY []int8
+			for _, idx := range timeIndices {
+				if idx < len(y) {
+					rangeTimestamps = append(rangeTimestamps, timestamps[idx])
+					rangeY = append(rangeY, y[idx])
+				}
+			}
+
 			// Apply downsampling for digital channels
-			returnTimes := timestamps
-			returnY := y
-			if needDownsample {
-				returnTimes, returnY = comtrade.DownsampleDigital(timestamps, y)
+			returnTimes := rangeTimestamps
+			returnY := rangeY
+			if needDownsample && len(rangeTimestamps) > 0 {
+				returnTimes, returnY = comtrade.DownsampleDigital(rangeTimestamps, rangeY)
 			}
 
 			series = append(series, map[string]any{

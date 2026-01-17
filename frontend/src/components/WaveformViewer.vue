@@ -25,7 +25,7 @@
             </n-tooltip>
             <n-tag type="default" size="small">开始: {{ datasetStore.metadata?.startTime }}</n-tag>
           </n-space>
-          <n-button type="primary" @click="refreshData" :loading="loading"> 刷新视图 </n-button>
+          <n-button type="primary" @click="refreshData()" :loading="loading"> 刷新视图 </n-button>
         </n-space>
       </template>
       <div ref="chartRef" class="chart"></div>
@@ -57,9 +57,14 @@ const chartInstance = shallowRef<echarts.ECharts>()
 const loading = ref(false)
 const sampleCount = ref(0)
 
+// Track initial data bounds for keeping X-axis consistent
+let initialWindow = { start: 0, end: 0 }
+const lastWindow = { start: 0, end: 0 }
+
 onMounted(() => {
   if (chartRef.value) {
     chartInstance.value = echarts.init(chartRef.value)
+    chartInstance.value.on('dataZoom', handleDataZoom)
     window.addEventListener('resize', resizeChart)
 
     refreshData()
@@ -88,7 +93,15 @@ watch(
   { deep: true },
 )
 
-async function refreshData() {
+watch(
+  () => datasetStore.currentId,
+  () => {
+    // Reset initial window when dataset metadata changes
+    initialWindow = { start: 0, end: 0 }
+  },
+)
+
+async function refreshData(startTime?: number, endTime?: number) {
   if (
     !datasetStore.currentId ||
     (viewStore.selectedAnalogChannels.length === 0 &&
@@ -101,11 +114,29 @@ async function refreshData() {
 
   loading.value = true
   try {
+    // For initial load without time range, use default downsampling
+    // For zoomed view with time range, fetch detailed data
     const data = await getWaveforms(
       datasetStore.currentId,
       viewStore.selectedAnalogChannels,
       viewStore.selectedDigitalChannels,
+      startTime,
+      endTime,
     )
+
+    // Store initial window on first load
+    if (initialWindow.start === 0 && initialWindow.end === 0) {
+      initialWindow = { start: data.window.start, end: data.window.end }
+    }
+
+    // Calculate zoom percentages if this is a zoomed refresh
+    let zoomStartPct = 0
+    let zoomEndPct = 100
+    if (startTime !== undefined && endTime !== undefined) {
+      const span = initialWindow.end - initialWindow.start
+      zoomStartPct = ((startTime - initialWindow.start) / span) * 100
+      zoomEndPct = ((endTime - initialWindow.start) / span) * 100
+    }
 
     // 规范化数字通道数据：确保值只有0和1
     const normalizedSeries = data.series.map((s) => {
@@ -138,8 +169,8 @@ async function refreshData() {
     }))
 
     const xAxes = normalizedSeries.map((_, i) => ({
-      min: data.window.start,
-      max: data.window.end,
+      min: initialWindow.start,
+      max: initialWindow.end,
       gridIndex: i,
       axisLabel: {
         show: i === seriesCount - 1,
@@ -176,14 +207,12 @@ async function refreshData() {
             if (value === 1) return '1'
             return ''
           },
-          interval: 1,
           showMinLabel: true,
           showMaxLabel: true,
         }
         yAxisConfig.splitLine = { show: false }
         yAxisConfig.axisTick = {
           show: true,
-          interval: 1,
           length: 3,
         }
       }
@@ -289,21 +318,56 @@ async function refreshData() {
         {
           type: 'inside',
           xAxisIndex: axesIndices,
+          start: zoomStartPct,
+          end: zoomEndPct,
         },
         {
           type: 'slider',
           xAxisIndex: axesIndices,
           bottom: 0,
+          start: zoomStartPct,
+          end: zoomEndPct,
         },
       ],
     }
 
     chartInstance.value?.setOption(option, { notMerge: true })
+    lastWindow.start = startTime !== undefined ? startTime : data.window.start
+    lastWindow.end = endTime !== undefined ? endTime : data.window.end
+    datasetStore.error = ''
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     datasetStore.error = msg
   } finally {
     loading.value = false
+  }
+}
+
+// Handle dataZoom events to load detailed data for zoomed region
+function handleDataZoom(params: unknown) {
+  if (!chartInstance.value) return
+
+  const p = params as echarts.ECElementEvent
+  // Get current zoom range from xAxis
+  const dz =
+    p.batch && Array.isArray(p.batch) && p.batch.length > 0 ? p.batch[0] : { start: 0, end: 100 }
+  const startPct: number = typeof dz.start === 'number' ? dz.start : 0
+  const endPct: number = typeof dz.end === 'number' ? dz.end : 100
+  const span = initialWindow.end - initialWindow.start
+  const zoomStart = initialWindow.start + (startPct / 100) * span
+  const zoomEnd = initialWindow.start + (endPct / 100) * span
+
+  // Only reload if zoomed significantly (more than 10% of range)
+  const threshold = (lastWindow.end - lastWindow.start) * 0.1
+
+  const zoomRange = zoomEnd - zoomStart
+  const offsetRange = Math.max(
+    Math.abs(zoomStart - lastWindow.start),
+    Math.abs(zoomEnd - lastWindow.end),
+  )
+  if ((zoomRange < threshold && zoomRange > 0) || offsetRange > threshold) {
+    // Zoomed in significantly, request detailed data
+    refreshData(zoomStart, zoomEnd)
   }
 }
 </script>

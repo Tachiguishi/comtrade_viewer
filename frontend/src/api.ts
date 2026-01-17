@@ -43,6 +43,19 @@ export type Metadata = {
   dataFileType: string
   timeMultiplier: number
 }
+export type WaveData = {
+  series: {
+    channel: number
+    type: string
+    name: string
+    unit: string
+    times: number[]
+    y: number[]
+  }[]
+  times: number[]
+  window: { start: number; end: number }
+  downsample: { method: string; targetPoints: number; originalPoints: number }
+}
 
 export async function listDatasets() {
   const { data } = await api.get<DatasetInfo[]>('/datasets')
@@ -65,25 +78,21 @@ export async function getWaveforms(
   id: string,
   analogChannels: number[],
   digitalChannels: number[],
+  startTime?: number,
+  endTime?: number,
 ) {
   const params = new URLSearchParams({
     A: analogChannels.join(','),
     D: digitalChannels.join(','),
   })
-  const { data } = await api.get(`/datasets/${id}/waveforms`, { params })
-  return data as {
-    series: {
-      channel: number
-      type: string
-      name: string
-      unit: string
-      times: number[]
-      y: number[]
-    }[]
-    times: number[]
-    window: { start: number; end: number }
-    downsample: { method: string; targetPoints: number; originalPoints: number }
+  if (startTime !== undefined) {
+    params.set('startTime', String(startTime))
   }
+  if (endTime !== undefined) {
+    params.set('endTime', String(endTime))
+  }
+  const { data } = await api.get(`/datasets/${id}/waveforms`, { params })
+  return data as WaveData
 }
 
 export async function getWaveCanvas(fileDirectory: string, fileName: string) {
