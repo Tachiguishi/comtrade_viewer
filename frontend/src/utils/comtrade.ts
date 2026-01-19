@@ -1,5 +1,5 @@
 // ==================== 类型定义 ====================
-export interface ChannelData {
+export type ChannelData = {
   name: string
   uu: string // 单位
   y: number[]
@@ -9,21 +9,22 @@ export interface ChannelData {
   ps: string
   ptct: number
   analyse: number
+  color: string
   cursor?: number
   cursor1?: number
 }
 
-export interface SampleInfo {
+export type SampleInfo = {
   samp: number
   endsamp: number
 }
 
-export interface AllSelector {
-  AD: string // 'A' 或 'V'
+export type AllSelector = {
+  AD: string // 'A' for analog or 'D' for digital
   phase: string // 'A', 'B', 'C', 'N'
 }
 
-export interface WaveDataType {
+export type WaveDataType = {
   chns: ChannelData[]
   ts: number[]
   beginTime: string
@@ -31,7 +32,7 @@ export interface WaveDataType {
   allSelector: AllSelector[]
 }
 
-export interface ValueData {
+export type ValueData = {
   name: string
   index: number
   valueStr: string
@@ -39,7 +40,7 @@ export interface ValueData {
   valueCyz: number
 }
 
-export interface MeasPhasor {
+export type MeasPhasor = {
   m_dVra: number
   m_dVia: number
   m_dVrp: number
@@ -51,6 +52,17 @@ export interface MeasPhasor {
   AngleA(): number
   ToXYP(rms: number, angle: number): void
   ToXYA(rms: number, angle: number): void
+}
+
+export function GetCurrentValue(value: ValueData): { a: number; b: number } {
+  let a = value.valueStr
+  let b = value.valueSsz
+  const re = /([0-9]+\.[0-9]{2})[0-9]*/
+
+  a = a.replace(re, '$1')
+  b = parseFloat(b.toFixed(2))
+
+  return { a: parseFloat(a), b }
 }
 
 // ==================== ValueFormatter 类 ====================
@@ -116,21 +128,21 @@ export class ValueFormatter {
       const dataArr: number[] = []
       for (let j = 0; j < sliceNum; j++) {
         const endIndex = Math.min(channel.y.length - 1, this._index + j)
-        dataArr[j] = channel.y[endIndex] * channel.a + channel.b
+        dataArr[j] = channel.y[endIndex]! * channel.a + channel.b
       }
 
       const ftabc = { fir: 0, sec: 0 }
 
       if (TN === 1) {
         if (harmonic === 1) {
-          ftabc.fir = dataArr[0]
-          ftabc.sec = dataArr[1]
+          ftabc.fir = dataArr[0]!
+          ftabc.sec = dataArr[1]!
         }
       } else {
         const m = TN >> 1
         for (let k = 0; k < TN; k++) {
-          ftabc.fir += dataArr[k] * Math.sin((k * harmonic * Math.PI) / m)
-          ftabc.sec += dataArr[k] * Math.cos((k * harmonic * Math.PI) / m)
+          ftabc.fir += dataArr[k]! * Math.sin((k * harmonic * Math.PI) / m)
+          ftabc.sec += dataArr[k]! * Math.cos((k * harmonic * Math.PI) / m)
         }
         ftabc.fir /= m
         ftabc.sec /= m
@@ -180,7 +192,7 @@ export class ValueFormatter {
           (bOneValue ? 'k' : '') +
           channel.uu,
         valueSsz: channel.y[index] ? channel.y[index] * channel.a + channel.b : 0,
-        valueCyz: channel.y[index],
+        valueCyz: channel.y[index]!,
       }
 
       rel.push(reObj)

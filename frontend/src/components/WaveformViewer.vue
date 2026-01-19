@@ -82,11 +82,7 @@ function resizeChart() {
 
 // Watchers to trigger update
 watch(
-  [
-    () => datasetStore.currentId,
-    () => viewStore.selectedAnalogChannels,
-    () => viewStore.selectedDigitalChannels,
-  ],
+  [() => viewStore.selectedAnalogChannels, () => viewStore.selectedDigitalChannels],
   () => {
     refreshData()
   },
@@ -98,6 +94,7 @@ watch(
   () => {
     // Reset initial window when dataset metadata changes
     initialWindow = { start: 0, end: 0 }
+    refreshData()
   },
 )
 

@@ -8,28 +8,76 @@
       <button @click="reStore()" type="button">还原波形</button>
     </div>
     <div class="wave-view" v-show="waveData.chns && waveData.chns.length > 0">
-      <!-- 蓝色游标 -->
-      <div ref="blueCursor" class="cursor-line-container">
-        <div id="blue" class="cursor-line" style="background: blue"></div>
-      </div>
-
-      <!-- 绿色游标 -->
-      <div ref="greenCursor" class="cursor-line-container">
-        <div id="green" class="cursor-line" style="background: green"></div>
-      </div>
-
-      <!-- 标尺容器 -->
-      <div ref="rulerDiv" id="rulerDiv" class="ruler-container">
-        <div id="rulerTime"></div>
-        <div id="nonius"></div>
-        <canvas ref="rulerCanvas" id="ruler"></canvas>
+      <div class="header-container">
+        <!-- title -->
+        <div
+          class="header-title"
+          :style="{
+            top: state.ymargin - state.lenghtyMargin - 30 + 'px',
+            left: state.xmargin + 'px',
+          }"
+        >
+          录波文件：{{ props.fileName }}
+          <span>开始时间：{{ state.beginTime }}</span>
+          <span>时标差：{{ state.timeDiff / 1000 }}ms</span>
+        </div>
+        <!-- timestamp labels -->
+        <div>
+          <div
+            class="timeLabel"
+            v-for="time in timestampLabels"
+            :key="time.index"
+            :style="{
+              top: state.ymargin - 18 + 'px',
+              left: time.offset + 'px',
+            }"
+          >
+            {{ time.label }}
+          </div>
+        </div>
+        <!-- timestamp tick -->
+        <canvas ref="rulerCanvas"></canvas>
       </div>
 
       <!-- 波形容器 -->
       <div ref="waveCanvasContainer" id="waveDiv" class="wave-container">
-        <div id="waveName"></div>
-        <div id="waveValue"></div>
+        <div class="channel-info">
+          <div
+            v-for="channel in channelsInfo"
+            :key="channel.index"
+            :style="{
+              position: 'absolute',
+              top: channel.offset + 'px',
+              left: state.xmargin + 10 + 'px',
+              color: channel.color,
+            }"
+          >
+            {{ channel.name }}
+          </div>
+          <div
+            v-for="channel in channelsValue"
+            :key="channel.index + '_values'"
+            :style="{
+              position: 'absolute',
+              top: channel.offset + 'px',
+              right: '30px',
+              color: channel.color,
+            }"
+          >
+            有效值: {{ channel.rms }} 瞬时值: {{ channel.instant }}
+          </div>
+        </div>
         <canvas ref="waveCanvas" id="waveContent"></canvas>
+      </div>
+
+      <!-- 蓝色游标 -->
+      <div ref="blueCursor" class="cursor-line-container">
+        <div class="cursor-line blue-line"></div>
+      </div>
+
+      <!-- 绿色游标 -->
+      <div ref="greenCursor" class="cursor-line-container">
+        <div class="cursor-line green-line"></div>
       </div>
     </div>
   </div>
@@ -39,7 +87,7 @@
 import { ref, reactive, watch, onMounted, nextTick } from 'vue'
 import { getWaveCanvas } from '@/api'
 import type { WaveDataType, ValueData } from '@/utils/comtrade.ts'
-import { ValueFormatter } from '@/utils/comtrade.ts'
+import { ValueFormatter, GetCurrentValue } from '@/utils/comtrade.ts'
 
 interface Props {
   fileDirectory: string
@@ -59,7 +107,6 @@ const rulerCanvas = ref<HTMLCanvasElement | null>(null)
 const waveCanvasContainer = ref<HTMLDivElement | null>(null)
 const blueCursor = ref<HTMLDivElement | null>(null)
 const greenCursor = ref<HTMLDivElement | null>(null)
-const rulerDiv = ref<HTMLDivElement | null>(null)
 
 // ==================== 响应式数据 ====================
 const waveData = reactive<Partial<WaveDataType>>({})
@@ -105,8 +152,28 @@ const state = reactive({
   stack: [] as number[],
 })
 
-// ==================== 计算屏幕位置 ====================
-const getPointPos = (cur: number): number => {
+const timestampLabels = reactive(
+  [] as {
+    label: string
+    index: number
+    offset: number
+  }[],
+)
+
+type ChannelInfo = {
+  index: number
+  name: string
+  color: string
+  offset: number
+  rms?: number // 有效值 root mean square
+  instant?: number // 瞬时值 instantaneous value
+}
+
+const channelsInfo = reactive([] as ChannelInfo[])
+const channelsValue = reactive([] as ChannelInfo[])
+
+// 根据游标位置获取数据索引
+function getIndexByCursorPosition(cur: number): number {
   let pos = 0
   if (state.pix > 1) {
     pos = state.pagestart + Math.floor((cur - state.xmargin) / state.pix)
@@ -117,7 +184,7 @@ const getPointPos = (cur: number): number => {
 }
 
 // ==================== 数据获取 ====================
-const getData = async (): Promise<void> => {
+async function getData() {
   try {
     const { data: res } = await getWaveCanvas('/tmp', 'file')
     console.log(res)
@@ -130,9 +197,7 @@ const getData = async (): Promise<void> => {
 }
 
 // ==================== 监听器 ====================
-watch(() => props.fileDirectory, getData)
-watch(() => props.randomTime, getData)
-watch(() => props.fileName, getData)
+watch([() => props.fileDirectory, () => props.fileName, () => props.randomTime], () => getData())
 
 // ==================== 生命周期 ====================
 onMounted(() => {
@@ -144,7 +209,7 @@ onMounted(() => {
 })
 
 // ==================== 初始化 ====================
-const init = (): void => {
+function init(): void {
   if (!waveCanvas.value || !rulerCanvas.value || !waveCanvasContainer.value) {
     console.error('Canvas or container element not found')
     return
@@ -255,14 +320,14 @@ const loadWaveData = (result: WaveDataType): void => {
       waveCanvas.value.height = state.canvasH
     }
 
-    if (getPointPos(state.cursor) >= result.ts.length) {
+    if (getIndexByCursorPosition(state.cursor) >= result.ts.length) {
       state.cursor = state.xmargin
     }
-    if (getPointPos(state.cursor1) >= result.ts.length) {
+    if (getIndexByCursorPosition(state.cursor1) >= result.ts.length) {
       state.cursor1 = state.xmargin + 200
     }
-    const time1 = result.ts[getPointPos(state.cursor)]
-    const time2 = result.ts[getPointPos(state.cursor1)]
+    const time1 = result.ts[getIndexByCursorPosition(state.cursor)]
+    const time2 = result.ts[getIndexByCursorPosition(state.cursor1)]
     if (typeof time1 === 'number' && typeof time2 === 'number') {
       state.timeDiff = time2 - time1
     } else {
@@ -272,9 +337,6 @@ const loadWaveData = (result: WaveDataType): void => {
 
     parameter(result)
     rulerParameter(result)
-
-    blueCursor.value?.style.setProperty('display', 'block')
-    greenCursor.value?.style.setProperty('display', 'block')
   }
 }
 
@@ -290,13 +352,8 @@ const rulerParameter = (result: WaveDataType): void => {
   if (!state.rulerContext) return
 
   state.rulerContext.clearRect(0, 0, state.canvasW, state.rulerH)
-  rulerStartdraw(result)
-}
-
-// ==================== 绘制方法 ====================
-const rulerStartdraw = (result: WaveDataType): void => {
-  outline(state.rulerContext!, state.canvasW, state.rulerH)
-  legend(result, state.rulerContext!)
+  drawTimestampTick(state.rulerContext!, state.canvasW, state.rulerH)
+  legend(result)
 }
 
 const startdraw = (result: WaveDataType): void => {
@@ -306,18 +363,20 @@ const startdraw = (result: WaveDataType): void => {
 const drawwave = (result: WaveDataType, cont: CanvasRenderingContext2D): void => {
   const chns = result.chns
   const allSelector = result.allSelector
-  const maxsv: number[] = []
-  const maxsi: number[] = []
+  const maxsv: number[] = [] // 电压最大值数组
+  const maxsi: number[] = [] // 电流最大值数组
   let max = 0
   let boo = true
 
   if (chns.length >= 4) {
     boo = false
     for (let i = 0; i < chns.length; i++) {
-      if (chns[i].uu === 'V') {
-        maxsv.push(Math.max(...chns[i].y))
-      } else if (chns[i].uu === 'A') {
-        maxsi.push(Math.max(...chns[i].y))
+      const chn = chns[i]
+      if (!chn) continue
+      if (chn.uu === 'V' && Array.isArray(chn.y)) {
+        maxsv.push(Math.max(...chn.y))
+      } else if (chn.uu === 'A' && Array.isArray(chn.y)) {
+        maxsi.push(Math.max(...chn.y))
       } else {
         max = 10
       }
@@ -326,17 +385,14 @@ const drawwave = (result: WaveDataType, cont: CanvasRenderingContext2D): void =>
 
   const maxi = Math.max(...maxsi, 0)
   const maxv = Math.max(...maxsv, 0)
-  let strName = ''
-  let aParam = ''
-  if (state.winW < 380) aParam = 'width:150px;'
 
   let curs = state.cursor
   if (state.valueColor === 'green') curs = state.cursor1
 
-  state.valueArr = state.formatter!.getValueDataByIndex(getPointPos(curs), false)
+  state.valueArr = state.formatter!.getValueDataByIndex(getIndexByCursorPosition(curs), false)
 
-  let str = ''
-
+  channelsInfo.splice(0, channelsInfo.length)
+  channelsValue.splice(0, channelsValue.length)
   for (let i = 0; i < chns.length; i++) {
     const bad = (state.gapcp - state.gap) / state.gapcp
     let line = i * state.gap + state.ymargin + 65 * bad
@@ -346,53 +402,51 @@ const drawwave = (result: WaveDataType, cont: CanvasRenderingContext2D): void =>
 
     let valueObj: ValueData | undefined = undefined
     for (let k = 0; k < state.valueArr.length; k++) {
-      if (state.valueArr[k].index === i) {
+      if (state.valueArr[k]?.index === i) {
         valueObj = state.valueArr[k]
       }
     }
 
     let channelColor = ''
-    if (allSelector[i].AD === 'A') {
-      if (allSelector[i].phase === 'A') {
+    if (allSelector[i]?.AD === 'A') {
+      if (allSelector[i]?.phase === 'A') {
         channelColor = 'rgb(255,255,0)'
-      } else if (allSelector[i].phase === 'B') {
+      } else if (allSelector[i]?.phase === 'B') {
         channelColor = 'rgb(0,255,0)'
-      } else if (allSelector[i].phase === 'C') {
+      } else if (allSelector[i]?.phase === 'C') {
         channelColor = 'rgb(255,0,0)'
-      } else if (allSelector[i].phase === 'N') {
+      } else if (allSelector[i]?.phase === 'N') {
         channelColor = 'rgb(0,255,255)'
       }
     } else {
       channelColor = 'rgb(255,128,0)'
     }
 
-    strName +=
-      "<div style='position:absolute;" +
-      aParam +
-      'top:' +
-      (line - 18) +
-      'px;left:' +
-      (state.xmargin + 10) +
-      'px;font-size: 0.7968vw;color:' +
-      channelColor +
-      "'>" +
-      chns[i].name +
-      '</div>'
+    const channel = chns[i]
+    if (typeof channel === 'undefined') {
+      continue
+    }
 
+    const channelInfo: ChannelInfo = {
+      index: i,
+      name: channel.name,
+      color: channelColor,
+      offset: line - 18,
+    }
+    channelsInfo.push(channelInfo)
+
+    const channelValue: ChannelInfo = {
+      index: i,
+      name: channel.name,
+      color: channelColor,
+      offset: line - 18,
+    }
+    channelsValue.push(channelValue)
     if (valueObj) {
-      let a = valueObj.valueStr
-      let b = valueObj.valueSsz
-      const re = /([0-9]+\.[0-9]{2})[0-9]*/
-      a = a.replace(re, '$1')
-      b = parseFloat(b.toFixed(2))
+      const value = GetCurrentValue(valueObj)
 
-      const value = ' 有效值:' + a + ' 瞬时值:' + b
-      str +=
-        "<div style='position:absolute;top:" +
-        (line - 18) +
-        "px;right:30px;font-size: 0.7968vw;color:#4ae3ed'>" +
-        value +
-        '</div>'
+      channelValue.rms = value.a
+      channelValue.instant = value.b
     }
 
     drawwavecan(cont, state.xmargin, line + 1, state.canvasW - state.xmargin, line + 1, '#fff')
@@ -405,14 +459,14 @@ const drawwave = (result: WaveDataType, cont: CanvasRenderingContext2D): void =>
       line + state.gap / 2 - 7,
     )
 
-    const ypoint = chns[i].y
+    const ypoint = channel.y
     if (boo) {
       max = Math.max(...ypoint)
     }
 
-    if (chns[i].uu === 'V') {
+    if (channel.uu === 'V') {
       max = maxv
-    } else if (chns[i].uu === 'A') {
+    } else if (channel.uu === 'A') {
       max = maxi
     } else {
       max = Math.max(...ypoint) * 2
@@ -429,15 +483,18 @@ const drawwave = (result: WaveDataType, cont: CanvasRenderingContext2D): void =>
 
     let k = 0
     for (let j = state.pagestart; j < ypoint.length; j++) {
-      if (ypoint[j + 1] !== undefined && j % state.pixneg === 0) {
+      const currentY = ypoint[j]
+      const nextY = ypoint[j + 1]
+      if (currentY === undefined || nextY === undefined) continue
+      if (j % state.pixneg === 0) {
         let endy = yvalue
-        let y = yvalue
+        // const y = yvalue
 
-        if (ypoint[j + 1]) {
-          y = yvalue + (ypoint[j] / max) * ratio
-          endy = yvalue - (ypoint[j + 1] / max) * ratio
-        } else if (ypoint[j]) {
-          y = yvalue + (ypoint[j] / max) * ratio
+        if (nextY) {
+          // y = yvalue + (currentY / max) * ratio
+          endy = yvalue - (nextY / max) * ratio
+        } else if (currentY) {
+          // y = yvalue + (currentY / max) * ratio
         }
 
         if (k <= state.canvasW - state.xmargin * 2) {
@@ -449,15 +506,6 @@ const drawwave = (result: WaveDataType, cont: CanvasRenderingContext2D): void =>
     }
     cont.stroke()
     cont.closePath()
-  }
-
-  const waveNameEl = document.getElementById('waveName')
-  const waveValueEl = document.getElementById('waveValue')
-  if (waveNameEl) waveNameEl.innerHTML = strName
-  if (waveValueEl) waveValueEl.innerHTML = str
-
-  if (waveCanvas.value) {
-    state.canvasDivH = waveCanvas.value.offsetHeight
   }
 }
 
@@ -502,33 +550,12 @@ const drawwavecan = (
 }
 
 // ==================== 绘制图例 ====================
-const legend = (result: WaveDataType, cont: CanvasRenderingContext2D): void => {
-  const info =
-    '录波文件名称：' +
-    props.fileName +
-    "<span style='margin-left: 20px;'>开始时间：" +
-    state.beginTime +
-    "</span><span style='margin-left: 20px;'>时标差：" +
-    state.timeDiff / 1000 +
-    'ms</span>'
-
-  const str =
-    "<div style='position:absolute;color: #4ae3ed;top:" +
-    (state.ymargin - state.lenghtyMargin - 30) +
-    'px;left:' +
-    state.xmargin +
-    "px;'>" +
-    info +
-    '</div>'
-
-  const rulerTimeEl = document.getElementById('rulerTime')
-  if (rulerTimeEl) rulerTimeEl.innerHTML = str
-
+const legend = (result: WaveDataType): void => {
   const ts = result.ts
   let k = 0
   let tf = true
-  let str2 = ''
 
+  timestampLabels.splice(0, timestampLabels.length)
   for (let j = state.pagestart; j < ts.length; j++) {
     if (ts[j + 1]) {
       if (j % 100 === 0) {
@@ -536,14 +563,15 @@ const legend = (result: WaveDataType, cont: CanvasRenderingContext2D): void => {
         if (k <= state.canvasW - state.xmargin * 2) {
           if (j % (state.pixneg * 100) === 0) {
             tf = true
-            str2 +=
-              "<div style='position:absolute;top:" +
-              (state.ymargin - 18) +
-              'px;left:' +
-              k +
-              "px;font-size: 11px;color: #78d1dc'>" +
-              ts[j] / 1000 +
-              'ms</div>'
+            const currentTime = ts[j]
+            if (typeof currentTime === 'number') {
+              const time = currentTime / 1000
+              timestampLabels.push({
+                label: time.toString() + 'ms',
+                index: j,
+                offset: k,
+              })
+            }
           }
         }
       }
@@ -569,13 +597,10 @@ const legend = (result: WaveDataType, cont: CanvasRenderingContext2D): void => {
       }
     }
   }
-
-  const noniusEl = document.getElementById('nonius')
-  if (noniusEl) noniusEl.innerHTML = str2
 }
 
-// ==================== 绘制轮廓 ====================
-const outline = (cont: CanvasRenderingContext2D, x: number, y: number): void => {
+// 绘制时间刻度
+function drawTimestampTick(cont: CanvasRenderingContext2D, x: number, y: number): void {
   cont.beginPath()
   cont.lineWidth = 2
   cont.strokeStyle = '#006686'
@@ -620,66 +645,47 @@ const mscoordinates = (
 
 // ==================== 移动游标重新绘制有效值 ====================
 const drawvalue = (result: WaveDataType, boo: boolean): void => {
-  const timeDiff = result.ts[getPointPos(state.cursor1)] - result.ts[getPointPos(state.cursor)]
-  const info =
-    '录波文件名称：' +
-    props.fileName +
-    "<span style='margin-left: 20px;'>开始时间：" +
-    state.beginTime +
-    "</span><span style='margin-left: 20px;'>时标差：" +
-    timeDiff / 1000 +
-    'ms</span>'
+  const cursor1Index = getIndexByCursorPosition(state.cursor1)
+  const cursorIndex = getIndexByCursorPosition(state.cursor)
+  const time1 = result.ts[cursor1Index]
+  const time2 = result.ts[cursorIndex]
+  if (typeof time1 === 'undefined' || typeof time2 === 'undefined') {
+    return
+  }
 
-  const str =
-    "<div style='position:absolute; color:#4ae3ed;top:" +
-    (state.ymargin - state.lenghtyMargin - 30) +
-    'px;left:' +
-    state.xmargin +
-    "px;'>" +
-    info +
-    '</div>'
-
-  const rulerTimeEl = document.getElementById('rulerTime')
-  if (rulerTimeEl) rulerTimeEl.innerHTML = str
+  state.timeDiff = time1 - time2
 
   const chns = result.chns
-  let paramNum = state.cursor
+  let index = cursorIndex
   state.valueColor = 'blue'
   if (!boo) {
-    paramNum = state.cursor1
+    index = cursor1Index
     state.valueColor = 'green'
   }
 
-  const valueArr = state.formatter!.getValueDataByIndex(getPointPos(paramNum), false)
-  let str2 = ''
-
+  const valueArr = state.formatter!.getValueDataByIndex(index, false)
   for (let i = 0; i < chns.length; i++) {
-    const bad = (state.gapcp - state.gap) / state.gapcp
-    let line = i * state.gap + state.ymargin + 65 * bad
-    if (line < state.ymargin + 100) {
-      line = i * 100 + state.ymargin
+    const channel = chns[i]
+    if (typeof channel === 'undefined') {
+      continue
     }
 
-    if (chns[i].analyse) {
-      let a = valueArr[i].valueStr
-      let b = valueArr[i].valueSsz
-      const re = /([0-9]+\.[0-9]{2})[0-9]*/
+    if (channel.analyse) {
+      const currentValue = GetCurrentValue(valueArr[i]!)
 
-      a = a.replace(re, '$1')
-      b = parseFloat(b.toFixed(2))
-
-      const value = ' 有效值:' + a + ' 瞬时值:' + b
-      str2 +=
-        "<div style='position:absolute;top:" +
-        (line - 18) +
-        "px;right:30px;font-size: 0.7968vw;color:#4ae3ed'>" +
-        value +
-        '</div>'
+      // find the same channel in channelsValue to update its rms and instant values
+      for (let j = 0; j < channelsValue.length; j++) {
+        const channelValue = channelsValue[j]
+        if (typeof channelValue === 'undefined') {
+          continue
+        }
+        if (channelValue.index === i) {
+          channelValue.rms = currentValue.a
+          channelValue.instant = currentValue.b
+        }
+      }
     }
   }
-
-  const waveValueEl = document.getElementById('waveValue')
-  if (waveValueEl) waveValueEl.innerHTML = str2
 }
 
 // ==================== 缩放控制 ====================
@@ -761,7 +767,7 @@ defineExpose({
   position: absolute;
   width: 20px;
   float: left;
-  display: none;
+  display: block;
 }
 .cursor-line {
   position: absolute;
@@ -770,10 +776,30 @@ defineExpose({
   left: 10px;
   float: left;
 }
-.ruler-container {
+.blue-line {
+  background: blue;
+}
+.green-line {
+  background: green;
+}
+.header-container {
   z-index: 886;
   position: absolute;
   color: #fff;
+}
+.header-title {
+  position: absolute;
+  color: #4ae3ed;
+  display: flex;
+  gap: 20px;
+}
+.timeLabel {
+  position: absolute;
+  font-size: 11px;
+  color: #78d1dc;
+}
+.channel-info {
+  font-size: 0.7968vw;
 }
 .wave-container {
   z-index: 887;
