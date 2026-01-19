@@ -1,13 +1,14 @@
 <template>
   <div class="waveViewer">
-    <div class="option-buttons" v-show="waveData.chns && waveData.chns.length > 0">
-      <button @click="horizontalZoom(true)" type="button">水平放大</button>
-      <button @click="horizontalZoom(false)" type="button">水平缩小</button>
-      <!-- <button @click="verticalZoom(10)" type="button">垂直放大</button>
-      <button @click="verticalZoom(-10)" type="button">垂直缩小</button> -->
-      <button @click="reStore()" type="button">还原波形</button>
-    </div>
-    <div class="wave-view" v-show="waveData.chns && waveData.chns.length > 0">
+    <div v-show="waveData.chns && waveData.chns.length > 0">
+      <div class="option-buttons">
+        <button @click="horizontalZoom(true)" type="button">水平放大</button>
+        <button @click="horizontalZoom(false)" type="button">水平缩小</button>
+        <!-- <button @click="verticalZoom(10)" type="button">垂直放大</button> -->
+        <!-- <button @click="verticalZoom(-10)" type="button">垂直缩小</button> -->
+        <button @click="reStore()" type="button">还原波形</button>
+      </div>
+
       <div class="header-container">
         <!-- title -->
         <div
@@ -71,12 +72,29 @@
       </div>
 
       <!-- 蓝色游标 -->
-      <div ref="blueCursor" class="cursor-line-container">
+      <div
+        ref="blueCursor"
+        class="cursor-line-container"
+        :style="{
+          top: state.ymargin + state.lenghtyMargin + 'px',
+          left: blueCursorPos - 10 + 'px',
+          height: state.canvasH - state.ymargin - state.lenghtyMargin + 'px',
+        }"
+      >
         <div class="cursor-line blue-line"></div>
       </div>
 
       <!-- 绿色游标 -->
-      <div ref="greenCursor" class="cursor-line-container">
+      <div
+        ref="greenCursor"
+        class="cursor-line-container"
+        :style="{
+          top: state.ymargin + state.lenghtyMargin + 'px',
+          left: greenCursorPos - 10 + 'px',
+          height: state.canvasH - state.ymargin - state.lenghtyMargin + 'px',
+        }"
+      >
+        >
         <div class="cursor-line green-line"></div>
       </div>
     </div>
@@ -118,8 +136,6 @@ const state = reactive({
   valueArr: [] as ValueData[],
 
   // 尺寸相关
-  winW: 0,
-  winH: 0,
   canvasW: 0,
   canvasH: 0,
   rulerH: 0,
@@ -131,8 +147,6 @@ const state = reactive({
   lenghtyMargin: 20, //刻度跟y边距之间的距离
 
   // 游标相关
-  cursor: 50, // 游标的位置
-  cursor1: 250, // 第二个游标的位置
   cursoradd: 0,
   cursorsub: 0,
   cursoradd1: 0,
@@ -171,6 +185,9 @@ type ChannelInfo = {
 
 const channelsInfo = reactive([] as ChannelInfo[])
 const channelsValue = reactive([] as ChannelInfo[])
+
+const blueCursorPos = ref<number>(0)
+const greenCursorPos = ref<number>(0)
 
 // 根据游标位置获取数据索引
 function getIndexByCursorPosition(cur: number): number {
@@ -218,13 +235,11 @@ function init(): void {
   const parentElement = waveCanvasContainer.value.parentElement
   const grandParentElement = parentElement?.parentElement
 
-  state.winW = grandParentElement?.offsetWidth || 0
-  state.winH = (grandParentElement?.offsetHeight || 0) - 20
+  state.canvasW = grandParentElement?.offsetWidth || 0
+  state.canvasH = (grandParentElement?.offsetHeight || 0) - 20
 
-  console.log('Window Width:', state.winW, 'Window Height:', state.winH)
+  console.log('Window Width:', state.canvasW, 'Window Height:', state.canvasH)
 
-  state.canvasW = state.winW
-  state.canvasH = state.winH
   state.rulerH = state.canvasH
   state.gapcp = state.gap
 
@@ -232,8 +247,8 @@ function init(): void {
   rulerCanvas.value.width = state.canvasW
   rulerCanvas.value.height = state.rulerH
 
-  waveCanvasContainer.value.style.width = state.winW + 'px'
-  waveCanvasContainer.value.style.height = state.winH - 70 + 'px'
+  waveCanvasContainer.value.style.width = state.canvasW + 'px'
+  waveCanvasContainer.value.style.height = state.canvasH - 70 + 'px'
 
   state.context = waveCanvas.value.getContext('2d')
   state.rulerContext = rulerCanvas.value.getContext('2d')
@@ -246,8 +261,7 @@ const setupEventListeners = (): void => {
   // 点击波形容器设置蓝色游标
   waveCanvasContainer.value.addEventListener('click', (event: MouseEvent) => {
     const parentRect = waveCanvasContainer.value!.parentElement!.getBoundingClientRect()
-    state.cursor = Math.floor(event.clientX - parentRect.left)
-    blueCursor.value!.style.left = state.cursor - 10 + 'px'
+    blueCursorPos.value = Math.floor(event.clientX - parentRect.left)
     drawvalue(waveData as WaveDataType, true)
   })
 
@@ -258,13 +272,8 @@ const setupEventListeners = (): void => {
   setupCursorDrag(greenCursor.value, false)
 
   // 初始化游标位置
-  blueCursor.value.style.top = state.ymargin + state.lenghtyMargin + 'px'
-  blueCursor.value.style.left = state.cursor - 10 + 'px'
-  blueCursor.value.style.height = state.canvasH - state.ymargin - state.lenghtyMargin + 'px'
-
-  greenCursor.value.style.top = state.ymargin + state.lenghtyMargin + 'px'
-  greenCursor.value.style.left = state.cursor1 - 10 + 'px'
-  greenCursor.value.style.height = state.canvasH - state.ymargin - state.lenghtyMargin + 'px'
+  blueCursorPos.value = 50
+  greenCursorPos.value = 250
 }
 
 // ==================== 游标拖动功能 ====================
@@ -280,11 +289,9 @@ const setupCursorDrag = (cursorElement: HTMLDivElement, isBlue: boolean): void =
       const newPos = Math.floor(event.clientX - parentRect.left)
 
       if (isBlue) {
-        state.cursor = newPos
-        blueCursor.value!.style.left = newPos - 10 + 'px'
+        blueCursorPos.value = newPos
       } else {
-        state.cursor1 = newPos
-        greenCursor.value!.style.left = newPos - 10 + 'px'
+        greenCursorPos.value = newPos
       }
 
       drawvalue(waveData as WaveDataType, isBlue)
@@ -320,14 +327,14 @@ const loadWaveData = (result: WaveDataType): void => {
       waveCanvas.value.height = state.canvasH
     }
 
-    if (getIndexByCursorPosition(state.cursor) >= result.ts.length) {
-      state.cursor = state.xmargin
+    if (getIndexByCursorPosition(blueCursorPos.value) >= result.ts.length) {
+      blueCursorPos.value = state.xmargin
     }
-    if (getIndexByCursorPosition(state.cursor1) >= result.ts.length) {
-      state.cursor1 = state.xmargin + 200
+    if (getIndexByCursorPosition(greenCursorPos.value) >= result.ts.length) {
+      greenCursorPos.value = state.xmargin + 200
     }
-    const time1 = result.ts[getIndexByCursorPosition(state.cursor)]
-    const time2 = result.ts[getIndexByCursorPosition(state.cursor1)]
+    const time1 = result.ts[getIndexByCursorPosition(blueCursorPos.value)]
+    const time2 = result.ts[getIndexByCursorPosition(greenCursorPos.value)]
     if (typeof time1 === 'number' && typeof time2 === 'number') {
       state.timeDiff = time2 - time1
     } else {
@@ -345,7 +352,7 @@ const parameter = (result: WaveDataType): void => {
   if (!state.context) return
 
   state.context.clearRect(state.xmargin, state.ymargin, state.canvasW, state.canvasH)
-  startdraw(result)
+  drawwave(result, state.context!)
 }
 
 const rulerParameter = (result: WaveDataType): void => {
@@ -353,11 +360,7 @@ const rulerParameter = (result: WaveDataType): void => {
 
   state.rulerContext.clearRect(0, 0, state.canvasW, state.rulerH)
   drawTimestampTick(state.rulerContext!, state.canvasW, state.rulerH)
-  legend(result)
-}
-
-const startdraw = (result: WaveDataType): void => {
-  drawwave(result, state.context!)
+  caculateTimestampLabels(result)
 }
 
 const drawwave = (result: WaveDataType, cont: CanvasRenderingContext2D): void => {
@@ -386,8 +389,8 @@ const drawwave = (result: WaveDataType, cont: CanvasRenderingContext2D): void =>
   const maxi = Math.max(...maxsi, 0)
   const maxv = Math.max(...maxsv, 0)
 
-  let curs = state.cursor
-  if (state.valueColor === 'green') curs = state.cursor1
+  let curs = blueCursorPos.value
+  if (state.valueColor === 'green') curs = greenCursorPos.value
 
   state.valueArr = state.formatter!.getValueDataByIndex(getIndexByCursorPosition(curs), false)
 
@@ -549,8 +552,8 @@ const drawwavecan = (
   cont.closePath()
 }
 
-// ==================== 绘制图例 ====================
-const legend = (result: WaveDataType): void => {
+// 计算时间轴标签
+function caculateTimestampLabels(result: WaveDataType): void {
   const ts = result.ts
   let k = 0
   let tf = true
@@ -577,20 +580,20 @@ const legend = (result: WaveDataType): void => {
       }
 
       if (tf) {
-        if (k === state.cursor) {
-          state.cursor = state.cursor === 0 ? j + 150 : state.cursor
-          state.cursor1 = state.cursor1 === 0 ? j + 300 : state.cursor1
+        if (k === blueCursorPos.value) {
+          blueCursorPos.value = blueCursorPos.value === 0 ? j + 150 : blueCursorPos.value
+          greenCursorPos.value = greenCursorPos.value === 0 ? j + 300 : greenCursorPos.value
         }
-        if (k === state.cursor + 10) {
+        if (k === blueCursorPos.value + 10) {
           state.cursoradd = j
         }
-        if (k === state.cursor - 10) {
+        if (k === blueCursorPos.value - 10) {
           state.cursorsub = j
         }
-        if (k === state.cursor1 + 10) {
+        if (k === greenCursorPos.value + 10) {
           state.cursoradd1 = j
         }
-        if (k === state.cursor1 - 10) {
+        if (k === greenCursorPos.value - 10) {
           state.cursorsub1 = j
         }
         k += state.pix
@@ -645,10 +648,10 @@ const mscoordinates = (
 
 // ==================== 移动游标重新绘制有效值 ====================
 const drawvalue = (result: WaveDataType, boo: boolean): void => {
-  const cursor1Index = getIndexByCursorPosition(state.cursor1)
-  const cursorIndex = getIndexByCursorPosition(state.cursor)
-  const time1 = result.ts[cursor1Index]
-  const time2 = result.ts[cursorIndex]
+  const greenIndex = getIndexByCursorPosition(greenCursorPos.value)
+  const blueIndex = getIndexByCursorPosition(blueCursorPos.value)
+  const time1 = result.ts[greenIndex]
+  const time2 = result.ts[blueIndex]
   if (typeof time1 === 'undefined' || typeof time2 === 'undefined') {
     return
   }
@@ -656,10 +659,10 @@ const drawvalue = (result: WaveDataType, boo: boolean): void => {
   state.timeDiff = time1 - time2
 
   const chns = result.chns
-  let index = cursorIndex
+  let index = blueIndex
   state.valueColor = 'blue'
   if (!boo) {
-    index = cursor1Index
+    index = greenIndex
     state.valueColor = 'green'
   }
 
@@ -744,22 +747,21 @@ defineExpose({
   width: 100%;
   height: 100%;
   user-select: none;
-}
-
-.option-buttons {
-  display: flex;
-  gap: 10px;
-  position: absolute;
-  right: 15px;
-  top: 0;
-  z-index: 900;
-}
-
-.wave-view {
-  position: relative;
-  width: 100%;
-  height: 100%;
   background-color: #000;
+}
+
+.header-container {
+  z-index: 886;
+  position: absolute;
+  color: #fff;
+}
+
+.wave-container {
+  z-index: 887;
+  position: absolute;
+  top: 50px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .cursor-line-container {
@@ -769,6 +771,16 @@ defineExpose({
   float: left;
   display: block;
 }
+
+.option-buttons {
+  z-index: 900;
+  display: flex;
+  gap: 10px;
+  position: absolute;
+  right: 15px;
+  top: 0;
+}
+
 .cursor-line {
   position: absolute;
   height: 100%;
@@ -782,11 +794,7 @@ defineExpose({
 .green-line {
   background: green;
 }
-.header-container {
-  z-index: 886;
-  position: absolute;
-  color: #fff;
-}
+
 .header-title {
   position: absolute;
   color: #4ae3ed;
@@ -800,12 +808,5 @@ defineExpose({
 }
 .channel-info {
   font-size: 0.7968vw;
-}
-.wave-container {
-  z-index: 887;
-  position: absolute;
-  top: 50px;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 </style>
