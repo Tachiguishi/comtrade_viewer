@@ -95,12 +95,8 @@ export async function getWaveforms(
   return data as WaveData
 }
 
-export async function getWaveCanvas(fileDirectory: string, fileName: string) {
-  const params = new URLSearchParams({
-    fileDirectory: fileDirectory,
-    fileName: fileName,
-  })
-  const data = await waveCanvasApi.get(`/previewRCDTest`, { params })
+export async function getWaveCanvas(id: string) {
+  const { data } = await api.get(`/datasets/${id}/wavecanvas`)
   return data
 }
 

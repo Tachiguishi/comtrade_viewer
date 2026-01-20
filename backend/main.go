@@ -324,8 +324,6 @@ func main() {
 		// Build series response
 		series := make([]map[string]any, 0, len(analogChannels)+len(digitalChannels))
 
-		
-
 		// Find the channel data
 		for _, chData := range dat.AnalogChannels {
 			if len(analogChannels) == 0 {
@@ -456,6 +454,116 @@ func main() {
 			"method":         downsampleMethod,
 			"targetPoints":   targetPoints,
 			"originalPoints": len(timestamps),
+		}
+
+		c.JSON(http.StatusOK, response)
+	})
+
+	r.GET("/api/datasets/:id/wavecanvas", gzip.Gzip(gzip.BestCompression), func(c *gin.Context) {
+		id := c.Param("id")
+		dp := filepath.Join(dataRoot, id)
+
+		// Try to load from memory cache first
+		var meta *comtrade.Metadata
+		var dat *comtrade.ChannelData
+
+		if cachedMeta, cachedDat, ok := cache.Get(id); ok {
+			meta = cachedMeta
+			dat = cachedDat
+			fmt.Printf("Cache hit for dataset %s\n", id)
+		} else {
+			fmt.Printf("Cache miss for dataset %s, parsing from disk\n", id)
+
+			var metaResult *comtrade.Metadata
+			var datResult *comtrade.ChannelData
+
+			metaPath := filepath.Join(dp, "meta.json")
+
+			// Try to load from file cache first (meta.json)
+			if b, err := os.ReadFile(metaPath); err == nil {
+				json.Unmarshal(b, &metaResult)
+				datResult, err = comtrade.ParseComtradeWithMetadata(filepath.Join(dp, "dat"), metaResult)
+				if err == nil {
+					meta = metaResult
+					dat = datResult
+				}
+			}
+
+			// If file cache didn't work, parse from scratch
+			if meta == nil || dat == nil {
+				m, d, err := comtrade.ParseComtrade(filepath.Join(dp, "cfg"), filepath.Join(dp, "dat"))
+				if err != nil {
+					code, msg, details := toFriendlyParseError(err)
+					writeError(c, http.StatusInternalServerError, code, msg, details)
+					return
+				}
+				meta = m
+				dat = d
+			}
+
+			// Store in memory cache for future requests
+			cache.Set(id, meta, dat)
+		}
+
+		sampleInfo := make([]map[string]any, 0)
+		for _, sample := range meta.SampleRates {
+			sampleInfo = append(sampleInfo, map[string]any{
+				"samp":       sample.SampRate,
+				"endsamp": sample.LastSampleNum,
+			})
+		}
+
+		selecters := make([]map[string]any, 0)
+		channels := make([]map[string]any, 0)
+		for _, ch := range meta.AnalogChannels {
+			selecters = append(selecters, map[string]any{
+				"channel": ch.ChannelNumber,
+				"groupName": ch.ChannelName,
+				"phase":    ch.Phase,
+				"AD": "A",
+			})
+
+			channels = append(channels, map[string]any{
+				"name": ch.ChannelName,
+				"uu": ch.Unit,
+				"a": ch.Multiplier,
+				"b": ch.Offset,
+				"ptct": ch.Primary / ch.Secondary,
+				"ps": ch.PS,
+				"max": ch.MaxValue,
+				"min": ch.MinValue,
+				"analyse": 1,
+				"y": dat.AnalogChannels[ch.ChannelNumber-1].RawData,
+				"skew": ch.Skew,
+			})
+		}
+		for _, ch := range meta.DigitalChannels {
+			selecters = append(selecters, map[string]any{
+				"channel": ch.ChannelNumber,
+				"groupName": ch.ChannelName,
+				"AD": "D",
+			})
+			channels = append(channels, map[string]any{
+				"name": ch.ChannelName,
+				"uu": "",
+				"a": 0,
+				"b": 0,
+				"ptct": 0,
+				"ps": "",
+				"max": 1,
+				"min": 1,
+				"analyse": 0,
+				"y": dat.DigitalChannels[ch.ChannelNumber-1].RawData,
+				"skew": 0,
+			})
+		}
+		
+		response := gin.H{
+			"beginTime": meta.StartTime,
+			"sampleInfo": sampleInfo,
+			"ts":		dat.Timestamps,
+			"allSelector": selecters,
+			"chns": channels,
 		}
 
 		c.JSON(http.StatusOK, response)

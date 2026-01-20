@@ -104,6 +104,9 @@ import { ref, reactive, watch, onMounted, nextTick } from 'vue'
 import { getWaveCanvas } from '@/api'
 import type { WaveDataType, ValueData } from '@/utils/comtrade.ts'
 import { ValueFormatter, GetCurrentValue } from '@/utils/comtrade.ts'
+import { useDatasetStore } from '../stores/dataset'
+
+const datasetStore = useDatasetStore()
 
 // ==================== 常量定义 ====================
 
@@ -381,12 +384,10 @@ function getDataIndexByCursorPosition(cursorPixelPos: number): number {
  */
 async function getData() {
   try {
-    const { data: response } = await getWaveCanvas('/tmp', 'file')
+    const response = await getWaveCanvas(datasetStore.currentId)
     console.log(response)
 
-    if (response.flag) {
-      loadWaveData(response.result)
-    }
+    loadWaveData(response)
   } catch (error) {
     console.error('加载波形数据失败:', error)
   }
