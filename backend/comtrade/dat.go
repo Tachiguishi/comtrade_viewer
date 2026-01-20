@@ -19,20 +19,20 @@ type DigitalChannelData struct {
 }
 
 type ChannelData struct {
-	Timestamps      []uint32             `json:"timestamps"`
+	Timestamps      []int32             `json:"timestamps"`
 	AnalogChannels  []AnalogChannelData  `json:"analogChannels"`
 	DigitalChannels []DigitalChannelData `json:"digitalChannels"`
 }
 
 func newChannelData() *ChannelData {
 	return &ChannelData{
-		Timestamps:      []uint32{},
+		Timestamps:      []int32{},
 		AnalogChannels:  []AnalogChannelData{},
 		DigitalChannels: []DigitalChannelData{},
 	}
 }
 
-func (dat *ChannelData) AddTimestampData(timestamp uint32) {
+func (dat *ChannelData) AddTimestampData(timestamp int32) {
 	dat.Timestamps = append(dat.Timestamps, timestamp)
 }
 
@@ -106,7 +106,8 @@ func parseDATFileASCII(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 
 		// ASCII格式: n,timestamp,a1,a2,...,ana,d1,d2,...,dnd
 		// 使用fmt.Sscanf或手动解析
-		var n, ts uint32
+		var n uint32
+		var ts int32
 
 		// 简化解析：使用fmt.Sscanf读取前两个值，然后手动解析其余
 		parts := splitCommaLine(line)
@@ -199,12 +200,15 @@ func parseDATFileBinary(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 		}
 
 		// 时间戳 (timestamp)
-		var ts uint32
+		var ts int32
 		if err := binary.Read(r, binary.LittleEndian, &ts); err != nil {
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				break
 			}
 			return nil, fmt.Errorf("read timestamp: %w", err)
+		}
+		if n < 100 {
+			fmt.Printf("Sample %d Timestamp: %d\n", n, ts)
 		}
 		dat.AddTimestampData(ts)
 

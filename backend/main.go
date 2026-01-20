@@ -459,7 +459,7 @@ func main() {
 		c.JSON(http.StatusOK, response)
 	})
 
-	r.GET("/api/datasets/:id/wavecanvas", gzip.Gzip(gzip.BestCompression), func(c *gin.Context) {
+	r.GET("/api/datasets/:id/wavecanvas", gzip.Gzip(gzip.BestSpeed), func(c *gin.Context) {
 		id := c.Param("id")
 		dp := filepath.Join(dataRoot, id)
 

@@ -21,7 +21,7 @@ import "math"
 //   - sampleLen:   Number of samples to produce in the time axis. This is the length
 //     of the returned slice. When timestamps are used, sampleLen should
 //     not exceed len(timestamps); typically it will equal len(timestamps).
-func ComputeTimeAxisFromMeta(meta Metadata, timestamps []uint32, sampleLen int) []float32 {
+func ComputeTimeAxisFromMeta(meta Metadata, timestamps []int32, sampleLen int) []float32 {
 	result := make([]float32, sampleLen)
 
 	secondsToMicrosecondsMultiplier := float32(1e6)
