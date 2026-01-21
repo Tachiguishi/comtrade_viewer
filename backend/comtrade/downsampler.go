@@ -5,10 +5,10 @@ import "math"
 const DefaultSampleRate = 50.0
 
 // ComputeTimeAxisFromMeta builds a time axis for the given signal metadata.
-// and nrates (SampleRates with SampRate and LastSampleNum). Returns microseconds.
+// and nrates (SampleRates with SampRate and LastSampleNum). Returns milliseconds.
 // sampleLen must be the exact number of samples to compute, and in the timestamps-based
 // branch len(timestamps) must be >= sampleLen; result is preallocated to this length.
-// The returned slice has length sampleLen and contains time values in microseconds.
+// The returned slice has length sampleLen and contains time values in milliseconds.
 //
 // Parameters:
 //   - meta:        COMTRADE metadata. If meta.RatesNum > 0 and meta.SampleRates is
@@ -26,7 +26,7 @@ const DefaultSampleRate = 50.0
 func ComputeTimeAxisFromMeta(meta Metadata, timestamps []int32, sampleLen int) []float32 {
 	result := make([]float32, sampleLen)
 
-	secondsToMicrosecondsMultiplier := float32(1e6)
+	secondsToMillisecondsMultiplier := float32(1000)
 	// Prefer Δt(N) = Σ(samples_in_segment / sample_rate) when nrates available
 	if meta.RatesNum > 0 && len(meta.SampleRates) > 0 {
 		elapsed := float32(0)
@@ -38,9 +38,9 @@ func ComputeTimeAxisFromMeta(meta Metadata, timestamps []int32, sampleLen int) [
 				rate = DefaultSampleRate
 			}
 			for i := prevLast; i < end; i++ {
-				result[i] = elapsed + float32(i-prevLast)/rate*secondsToMicrosecondsMultiplier
+				result[i] = elapsed + float32(i-prevLast)/rate*secondsToMillisecondsMultiplier
 			}
-			elapsed += float32(end-prevLast) / rate * secondsToMicrosecondsMultiplier
+			elapsed += float32(end-prevLast) / rate * secondsToMillisecondsMultiplier
 			prevLast = end
 			if prevLast >= sampleLen {
 				break
@@ -52,7 +52,7 @@ func ComputeTimeAxisFromMeta(meta Metadata, timestamps []int32, sampleLen int) [
 				rate = DefaultSampleRate
 			}
 			for i := prevLast; i < sampleLen; i++ {
-				result[i] = elapsed + float32(i-prevLast)/rate*secondsToMicrosecondsMultiplier
+				result[i] = elapsed + float32(i-prevLast)/rate*secondsToMillisecondsMultiplier
 			}
 		}
 	} else {
@@ -62,7 +62,7 @@ func ComputeTimeAxisFromMeta(meta Metadata, timestamps []int32, sampleLen int) [
 			mul = 1.0
 		}
 		for i := range result {
-			result[i] = float32(timestamps[i]) * mul
+			result[i] = float32(timestamps[i]) * mul / secondsToMillisecondsMultiplier
 		}
 	}
 

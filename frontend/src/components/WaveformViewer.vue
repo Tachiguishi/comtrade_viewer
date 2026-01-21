@@ -127,13 +127,9 @@ async function refreshData(startTime?: number, endTime?: number) {
     }
 
     // Calculate zoom percentages if this is a zoomed refresh
-    let zoomStartPct = 0
-    let zoomEndPct = 100
-    if (startTime !== undefined && endTime !== undefined) {
-      const span = initialWindow.end - initialWindow.start
-      zoomStartPct = ((startTime - initialWindow.start) / span) * 100
-      zoomEndPct = ((endTime - initialWindow.start) / span) * 100
-    }
+    const span = initialWindow.end - initialWindow.start
+    const zoomStartPct = ((data.timeRange.start - initialWindow.start) / span) * 100
+    const zoomEndPct = ((data.timeRange.end - initialWindow.start) / span) * 100
 
     // 规范化数字通道数据：确保值只有0和1
     const normalizedSeries = data.series.map((s) => {
@@ -171,6 +167,12 @@ async function refreshData(startTime?: number, endTime?: number) {
       gridIndex: i,
       axisLabel: {
         show: i === seriesCount - 1,
+        formatter: (value: number) => {
+          if (i !== seriesCount - 1) {
+            return value.toFixed(0)
+          }
+          return value.toFixed(0) + ' ms'
+        },
       },
       axisTick: { show: false },
       axisLine: { show: false },

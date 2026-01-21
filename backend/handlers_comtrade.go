@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -270,9 +271,13 @@ func registerComtradeRoutes(r *gin.Engine, dataRoot string) {
         // 时间轴
         timestamps := comtrade.ComputeTimeAxisFromMeta(*meta, dat.Timestamps, len(dat.Timestamps))
 
-        // 时间范围
+        // 时间范围: 默认显示10%数据点的范围
         startTime := timestamps[0]
-        endTime := timestamps[len(timestamps)-1]
+        endTimeIndex := int(math.Max(5000, float64(len(timestamps)/20)))
+        if endTimeIndex >= len(timestamps) {
+            endTimeIndex = len(timestamps) - 1
+        }
+        endTime := timestamps[endTimeIndex]
         if st := c.Query("startTime"); st != "" {
             if v, err := strconv.ParseFloat(st, 32); err == nil {
                 startTime = float32(v)
@@ -287,7 +292,7 @@ func registerComtradeRoutes(r *gin.Engine, dataRoot string) {
         // 过滤时间范围
         var filteredTimestamps []float32
         var timeIndices []int
-        if startTime != 0 && endTime != 0 && startTime < endTime {
+        if (startTime != 0 || endTime != 0) && startTime < endTime {
             for i, t := range timestamps {
                 if t >= startTime && t <= endTime {
                     timeIndices = append(timeIndices, i)
@@ -430,6 +435,7 @@ func registerComtradeRoutes(r *gin.Engine, dataRoot string) {
         response := gin.H{
             "series": series,
             "window": map[string]float32{"start": timestamps[0], "end": timestamps[len(timestamps)-1]},
+            "timeRange": map[string]float32{"start": startTime, "end": endTime},
         }
 
         response["downsample"] = map[string]any{

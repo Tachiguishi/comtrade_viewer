@@ -56,6 +56,7 @@ export type WaveData = {
   }[]
   times: number[]
   window: { start: number; end: number }
+  timeRange: { start: number; end: number }
   downsample: { method: string; targetPoints: number; originalPoints: number }
 }
 
