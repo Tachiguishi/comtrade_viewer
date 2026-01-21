@@ -24,19 +24,16 @@ timemult <CR/LF>
 逐行详解：
 
 - 第 1 行：电站、设备和标准版本
-
   - station_name: 变电站名称（例如: "Substation_A"）
   - rec_dev_id: 录波设备 ID（例如: "Relay_B2"）
-  - rev_year: 使用的 Comtrade 标准年份（例如: "1999" 或 "2013"）
+  - rev_year: 使用的 Comtrade 标准年份（例如: "1999" 或 "2013". 1991版没有该属性，若缺省则表示1991版）
 
 - 第 2 行：通道计数 TT
-
   - 总通道数: Total Channels = NA + ND
   - NA: 模拟通道（Analog）数量
   - ND: 数字通道（Digital）数量
 
 - 第 3 行 到 (NA+2) 行：模拟通道（Analog Channel）定义
-
   - An: 模拟通道序号（1..NA）
   - ch_id: 通道名称（例如: "Va", "Ia"）
   - ph: 相位标识（例如: "A", "B", "C", "N"）
@@ -46,13 +43,12 @@ timemult <CR/LF>
   - b: 加法偏移量（截距）
   - skew: 时间偏移（通常为 0）
   - min, max: 该通道在 .DAT 中原始数据的最小/最大值（用于校验）
-  - primary: CT/PT 一次侧系数（例如 3000A）
-  - secondary: CT/PT 二次侧系数（例如 5A）
-  - PS: 'P' 表示一次侧值，'S' 表示二次侧值
+  - primary: CT/PT 一次侧系数（例如 3000）
+  - secondary: CT/PT 二次侧系数（例如 5）
+  - PS: 表示数据中值是一次侧(P)还是二次侧(S)的值, 如果要求显示的值与提供的不同, 则需要用 primary/secondary 进行换算
   - 真实值计算: 真实物理值 = (a × DataValue) + b，其中 DataValue 为 .DAT 中的原始整数值
 
 - 第 (NA+3) 行 到 (NA+ND+2) 行：数字通道（Digital Channel）定义
-
   - Dn: 数字通道序号（1..ND）
   - ch_id: 通道名称（例如: "Trip_Signal_A", "Breaker_Status"）
   - ph: 相位标识（可留空）
@@ -60,36 +56,34 @@ timemult <CR/LF>
   - y: 通道正常状态（0 或 1）
 
 - 倒数第 6 行：电网频率
-
   - lf: 标称电网频率（例如: 50 或 60 Hz）
 
 - 倒数第 5 行：采样率段数
-
   - nrates: 采样率变化次数（绝大多数场景为 1）
 
 - 倒数第 4 行：采样率定义（若 nrates > 1，此处会有多行）
-
   - samp: 采样率（Hz，例如: 12800）
   - endsamp: 该采样率持续到的最后样本序号
 
 - 倒数第 3 行：开始时间
-
   - dd/mm/yyyy,hh:mm:ss.ssssss：记录中第一个采样点的绝对时间
 
 - 倒数第 2 行：触发时间
-
   - dd/mm/yyyy,hh:mm:ss.ssssss：故障触发事件的绝对时间
   - 可通过与开始时间对比得出“故障前”数据长度
 
 - 倒数第 1 行：数据文件格式
-  - ft: 指明 .DAT 文件是 ASCII 还是 Binary
+  - ft: 指明 .DAT 文件是 ASCII 还是 Binary, 2013 版标准还支持 32-bit 整数和浮点格式
+    - "ASCII"
+    - "BINARY"（1999 版标准，16-bit 整数）
+    - "BINARY32"（2013 版标准，32-bit 整数）
+    - "FLOAT32"（2013 版标准，32-bit 浮点）
 
 ## .DAT (Data File - 数据文件)
 
 .DAT 文件存储了所有通道在每个采样点的瞬时值。它没有“元数据”，纯粹是数据罗列。其格式由 .CFG 文件的最后一行 (ft) 决定。以下以 NA=2（模拟通道 2 个）、ND=1（数字通道 1 个）为例。
 
 - 格式一：ASCII
-
   - 每一行代表一个采样点，逗号分隔：
     n, timestamp, A1, A2, ..., ANA, D1, D2, ..., DND
   - 字段说明：
@@ -116,12 +110,13 @@ timemult <CR/LF>
 | 数据                | 数据类型                         | 字节数 |
 | ------------------- | -------------------------------- | ------ |
 | 样本序号 (n)        | 32 位无符号整数 (unsigned long)  | 4 字节 |
-| 时间戳 (timestamp)  | 32 位无符号整数 (unsigned long)  | 4 字节 |
+| 时间戳 (timestamp)  | 32 位整数 (long)                 | 4 字节 |
 | 模拟通道 1 (A1)     | 16 位有符号整数 (short)          | 2 字节 |
 | 模拟通道 2 (A2)     | 16 位有符号整数 (short)          | 2 字节 |
 | …（直到 ANA）       |                                  |        |
 | 数字通道 (D1...DND) | 16 位无符号整数 (unsigned short) | 2 字节 |
 
+- 时间戳可能为负值，表示触发前的数据
 - 模拟通道 Ai：16 位有符号整数（int16，每个 2 字节，重复 NA 次）
 - 数字通道打包：16 位无符号整数（uint16，2 字节）× ceil(ND/16)
   - 若 ND ≤ 16：D1..DND 打包到 1 个 uint16

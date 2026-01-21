@@ -207,9 +207,6 @@ func parseDATFileBinary(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 			}
 			return nil, fmt.Errorf("read timestamp: %w", err)
 		}
-		if n < 100 {
-			fmt.Printf("Sample %d Timestamp: %d\n", n, ts)
-		}
 		dat.AddTimestampData(ts)
 
 		// 模拟量 NA × int16
@@ -241,7 +238,7 @@ func parseDATFileBinary(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 					}
 					return nil, fmt.Errorf("read analog ch %d: %w", i+1, err)
 				}
-				dat.AddAnalogData(i+1, int32(raw)) // 存为int32，后续可转换
+				dat.AddAnalogDataFloat(i+1, raw)
 			default:
 				return nil, fmt.Errorf("unsupported analog data type: %s", cfg.DataFileType)
 			}

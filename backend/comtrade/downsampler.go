@@ -2,6 +2,8 @@ package comtrade
 
 import "math"
 
+const DefaultSampleRate = 50.0
+
 // ComputeTimeAxisFromMeta builds a time axis for the given signal metadata.
 // and nrates (SampleRates with SampRate and LastSampleNum). Returns microseconds.
 // sampleLen must be the exact number of samples to compute, and in the timestamps-based
@@ -33,7 +35,7 @@ func ComputeTimeAxisFromMeta(meta Metadata, timestamps []int32, sampleLen int) [
 			end := min(sr.LastSampleNum, sampleLen)
 			rate := float32(sr.SampRate)
 			if rate <= 0 {
-				rate = 1000.0
+				rate = DefaultSampleRate
 			}
 			for i := prevLast; i < end; i++ {
 				result[i] = elapsed + float32(i-prevLast)/rate*secondsToMicrosecondsMultiplier
@@ -47,20 +49,20 @@ func ComputeTimeAxisFromMeta(meta Metadata, timestamps []int32, sampleLen int) [
 		if prevLast < sampleLen {
 			rate := float32(meta.SampleRates[len(meta.SampleRates)-1].SampRate)
 			if rate <= 0 {
-				rate = 1000.0
+				rate = DefaultSampleRate
 			}
 			for i := prevLast; i < sampleLen; i++ {
 				result[i] = elapsed + float32(i-prevLast)/rate*secondsToMicrosecondsMultiplier
 			}
 		}
 	} else {
+		// Fallback: use raw timestamps with TimeMultiplier(microseconds)
 		mul := float32(meta.TimeMultiplier)
 		if mul == 0 {
-			// Default to microseconds→seconds if not set
-			mul = 1e-6
+			mul = 1.0
 		}
 		for i := range result {
-			result[i] = float32(timestamps[i]) * mul * secondsToMicrosecondsMultiplier
+			result[i] = float32(timestamps[i]) * mul
 		}
 	}
 
@@ -87,10 +89,7 @@ func DownsampleLTTB(timestamps []float32, y []float64, targetPoints int) ([]floa
 
 	for i := 0; i < targetPoints-2; i++ {
 		avgRangeStart := int(float64(i+1)*bucketSize) + 1
-		avgRangeEnd := int(float64(i+2)*bucketSize) + 1
-		if avgRangeEnd >= n {
-			avgRangeEnd = n
-		}
+		avgRangeEnd := min(int(float64(i+2)*bucketSize) + 1, n)
 
 		// Calculate average point in next bucket
 		avgX := float64(0)
@@ -107,10 +106,7 @@ func DownsampleLTTB(timestamps []float32, y []float64, targetPoints int) ([]floa
 
 		// Find point in current bucket with largest triangle area
 		rangeStart := int(float64(i)*bucketSize) + 1
-		rangeEnd := avgRangeStart
-		if rangeEnd > n {
-			rangeEnd = n
-		}
+		rangeEnd := min(avgRangeStart, n)
 
 		maxArea := -1.0
 		maxIdx := rangeStart
@@ -151,6 +147,7 @@ func DownsampleDigital(timestamps []float32, y []int8) ([]float32, []int8) {
 
 	// Find all state changes
 	for i := 1; i < n - 1; i++ {
+		// If current point differs from either neighbor, it's a state change
 		if y[i] != y[i+1] || y[i] != y[i-1] {
 			downsampledT = append(downsampledT, timestamps[i])
 			downsampledY = append(downsampledY, y[i])
