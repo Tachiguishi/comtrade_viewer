@@ -225,14 +225,14 @@ export class MeasPhasor {
  * @param value 值数据
  * @returns 格式化后的数值对象 {a: 格式化后的字符串值, b: 格式化后的实际值}
  */
-export function GetCurrentValue(value: ValueData): { a: number; b: number } {
-  const decimalPattern = /([0-9]+\.[0-9]{2})[0-9]*/
+export function GetCurrentValue(value: ValueData): { a: string; b: number } {
+  // const decimalPattern = /([0-9]+\.[0-9]{2})[0-9]*/
 
-  const formattedStr = value.valueStr.replace(decimalPattern, '$1')
+  // const formattedStr = value.valueStr.replace(decimalPattern, '$1')
   const formattedNum = parseFloat(value.valueSsz.toFixed(DEFAULT_DECIMAL_PLACES))
 
   return {
-    a: parseFloat(formattedStr),
+    a: value.valueStr,
     b: formattedNum,
   }
 }

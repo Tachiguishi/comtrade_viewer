@@ -62,6 +62,7 @@
               top: channel.offset + 'px',
               right: '30px',
               color: channel.color,
+              display: channel.rms !== undefined ? 'block' : 'none',
             }"
           >
             有效值: {{ channel.rms }} 瞬时值: {{ channel.instant }}
@@ -154,6 +155,9 @@ const UI_COLORS = {
   DASH_LINE: '#bbb',
 } as const
 
+/** 滚动节流延迟（毫秒） */
+const SCROLL_THROTTLE_DELAY = 16 // 约60fps
+
 // ==================== 类型定义 ====================
 
 /** 组件属性 */
@@ -177,9 +181,16 @@ type ChannelInfo = {
   /** 垂直偏移量 */
   offset: number
   /** 有效值 (RMS) */
-  rms?: number
+  rms?: string
   /** 瞬时值 */
   instant?: number
+}
+
+/** 通道边界信息 */
+type ChannelBoundary = {
+  maxVoltage: number
+  maxCurrent: number
+  beGlobal: boolean
 }
 
 /** 时间戳标签 */
@@ -331,6 +342,24 @@ const channelsInfo = reactive<ChannelInfo[]>([])
 /** 通道值数组 */
 const channelsValue = reactive<ChannelInfo[]>([])
 
+/** 通道通用信息 */
+const channelBoundary = reactive<ChannelBoundary>({
+  maxVoltage: 0,
+  maxCurrent: 0,
+  beGlobal: false,
+})
+
+/** 滚动节流定时器 */
+let scrollThrottleTimer: number | null = null
+
+/** 可视通道范围 */
+const visibleChannelRange = reactive({
+  start: 0,
+  end: 0,
+})
+
+const visiableChannels: number[] = []
+
 // ==================== 工具函数 ====================
 
 /**
@@ -375,6 +404,36 @@ function getDataIndexByCursorPosition(cursorPixelPos: number): number {
   }
 
   return dataIndex
+}
+
+/**
+ * 计算当前可视区域内的通道索引范围
+ * @returns 可视通道的起始和结束索引
+ */
+function calculateVisibleChannels(): { start: number; end: number } {
+  if (!waveCanvasContainer.value) {
+    return { start: 0, end: 0 }
+  }
+
+  const scrollTop = waveCanvasContainer.value.scrollTop
+  const containerHeight = state.rulerH
+  console.log('Scroll Top:', scrollTop, 'Container Height:', containerHeight)
+  const totalChannels = waveData.chns?.length || 0
+
+  if (totalChannels === 0) {
+    return { start: 0, end: 0 }
+  }
+
+  // 计算可视区域的起始和结束通道索引
+  // 添加缓冲区以提供更平滑的滚动体验
+  const bufferChannels = 2
+  const startChannel = Math.max(0, Math.floor(scrollTop / state.gap) - bufferChannels)
+  const endChannel = Math.min(
+    totalChannels,
+    Math.ceil((scrollTop + containerHeight) / state.gap) + bufferChannels,
+  )
+
+  return { start: startChannel, end: endChannel }
 }
 
 // ==================== 数据获取 ====================
@@ -456,6 +515,9 @@ const setupEventListeners = (): void => {
     updateChannelValues(waveData as WaveDataType, true)
   })
 
+  // 设置滚动事件监听
+  setupScrollListener()
+
   // 设置蓝色游标拖动
   setupCursorDrag(blueCursor.value, true)
 
@@ -465,6 +527,40 @@ const setupEventListeners = (): void => {
   // 初始化游标位置
   blueCursorPos.value = 50
   greenCursorPos.value = 250
+}
+
+/**
+ * 设置滚动事件监听器（带节流）
+ */
+const setupScrollListener = (): void => {
+  if (!waveCanvasContainer.value) return
+
+  waveCanvasContainer.value.addEventListener('scroll', () => {
+    if (scrollThrottleTimer !== null) {
+      return
+    }
+
+    scrollThrottleTimer = window.setTimeout(() => {
+      scrollThrottleTimer = null
+      handleScroll()
+    }, SCROLL_THROTTLE_DELAY)
+  })
+}
+
+/**
+ * 处理滚动事件
+ */
+const handleScroll = (): void => {
+  const newRange = calculateVisibleChannels()
+
+  // 只有当可视范围发生变化时才重绘
+  if (newRange.start !== visibleChannelRange.start || newRange.end !== visibleChannelRange.end) {
+    visibleChannelRange.start = newRange.start
+    visibleChannelRange.end = newRange.end
+    if (state.context) {
+      drawNewWaveOnly(waveData as WaveDataType, state.context!)
+    }
+  }
 }
 
 // ==================== 游标拖动功能 ====================
@@ -553,6 +649,11 @@ const loadWaveData = (result: WaveDataType): void => {
 
   state.beginTime = result.beginTime.slice(0, result.beginTime.length - 3)
 
+  // 计算初始可视区域
+  const initialRange = calculateVisibleChannels()
+  visibleChannelRange.start = initialRange.start
+  visibleChannelRange.end = initialRange.end
+
   renderWaveform(result)
   renderRuler(result)
 }
@@ -564,6 +665,7 @@ const renderWaveform = (result: WaveDataType): void => {
   if (!state.context) return
 
   state.context.clearRect(state.xmargin, state.ymargin, state.canvasW, state.canvasH)
+  visiableChannels.splice(0, visiableChannels.length)
   drawwave(result, state.context)
 }
 
@@ -619,7 +721,9 @@ const drawwave = (result: WaveDataType, context: CanvasRenderingContext2D): void
 
   // 计算最大值
   const { maxVoltage, maxCurrent } = calculateMaxValues(channels)
-  const shouldUseGlobalMax = channels.length < 4
+  channelBoundary.maxCurrent = maxCurrent
+  channelBoundary.maxVoltage = maxVoltage
+  channelBoundary.beGlobal = channels.length < 4
 
   // 获取当前游标位置的值
   const currentCursorPos = state.valueColor === 'green' ? greenCursorPos.value : blueCursorPos.value
@@ -643,27 +747,53 @@ const drawwave = (result: WaveDataType, context: CanvasRenderingContext2D): void
     // 获取通道颜色
     const channelColor = getChannelColor(allSelector[i]?.AD, allSelector[i]?.phase)
 
-    // 创建通道信息
+    // 创建通道信息（始终创建以保持索引一致）
     const channelInfo = createChannelInfo(channel, i, channelColor, channelLineY)
     channelsInfo.push(channelInfo)
 
     // 创建通道值信息
     const channelValueInfo = createChannelValueInfo(channel, i, channelColor, channelLineY)
     channelsValue.push(channelValueInfo)
+  }
 
-    // 绘制通道基准线
-    drawChannelBaselines(context, channelLineY)
+  drawNewWaveOnly(result, context)
+}
 
-    // 绘制波形
-    drawChannelWaveform(
-      context,
-      channel,
-      channelLineY,
-      channelColor,
-      maxVoltage,
-      maxCurrent,
-      shouldUseGlobalMax,
-    )
+function drawNewWaveOnly(result: WaveDataType, context: CanvasRenderingContext2D) {
+  const channels = result.chns
+
+  // 只绘制可视区域内的通道
+  for (let i = visibleChannelRange.start; i < visibleChannelRange.end; i++) {
+    const channel = channels[i]
+    if (!channel) continue
+
+    // 跳过不在可视区域的通道的绘制，但仍需要添加通道信息以保持索引一致
+    const isVisible = !visiableChannels.includes(i)
+
+    // 计算通道线的垂直位置
+    const channelLineY = calculateChannelLineY(i)
+
+    // 获取通道颜色
+    const channelColor = channelsInfo[i]?.color
+
+    // 只绘制可视区域内的通道
+    if (isVisible) {
+      visiableChannels.push(i)
+
+      // 绘制通道基准线
+      drawChannelBaselines(context, channelLineY)
+
+      // 绘制波形
+      drawChannelWaveform(
+        context,
+        channel,
+        channelLineY,
+        channelColor || PHASE_COLORS.N,
+        channelBoundary.maxVoltage,
+        channelBoundary.maxCurrent,
+        channelBoundary.beGlobal,
+      )
+    }
   }
 }
 
@@ -1081,6 +1211,17 @@ const reStore = (): void => {
   state.pagestart = 0
   state.pagelast = state.stack[0] || 0
   state.stack = []
+
+  // 重置滚动位置
+  if (waveCanvasContainer.value) {
+    waveCanvasContainer.value.scrollTop = 0
+  }
+
+  // 重新计算可视区域
+  const initialRange = calculateVisibleChannels()
+  visibleChannelRange.start = initialRange.start
+  visibleChannelRange.end = initialRange.end
+
   loadWaveData(waveData as WaveDataType)
 }
 </script>
