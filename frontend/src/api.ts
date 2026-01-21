@@ -1,7 +1,9 @@
-import axios, { AxiosError } from 'axios'
+import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
 
 export const api = axios.create({ baseURL: '/api' })
 export const waveCanvasApi = axios.create({ baseURL: '/fault' })
+
+let authInterceptorsInstalled = false
 
 export type DatasetInfo = { datasetId: string; name: string; createdAt: number; sizeBytes: number }
 export type AnalogChannelMeta = {
@@ -57,6 +59,36 @@ export type WaveData = {
   downsample: { method: string; targetPoints: number; originalPoints: number }
 }
 
+type LoginRequest = { username: string; password: string }
+export type LoginResponse = { token: string; expiresAt: number }
+
+export function setupApiAuth(getToken: () => string | null, onUnauthorized?: () => void) {
+  if (authInterceptorsInstalled) return
+  authInterceptorsInstalled = true
+
+  const injectAuth = (config: InternalAxiosRequestConfig) => {
+    const token = getToken()
+    if (token) {
+      config.headers = config.headers || {}
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  }
+
+  const handleUnauthorized = (error: AxiosError) => {
+    if (error.response?.status === 401 && onUnauthorized) {
+      onUnauthorized()
+    }
+    return Promise.reject(error)
+  }
+
+  api.interceptors.request.use(injectAuth)
+  api.interceptors.response.use((resp) => resp, handleUnauthorized)
+
+  waveCanvasApi.interceptors.request.use(injectAuth)
+  waveCanvasApi.interceptors.response.use((resp) => resp, handleUnauthorized)
+}
+
 export async function listDatasets() {
   const { data } = await api.get<DatasetInfo[]>('/datasets')
   return data
@@ -93,6 +125,11 @@ export async function getWaveforms(
   }
   const { data } = await api.get(`/datasets/${id}/waveforms`, { params })
   return data as WaveData
+}
+
+export async function login(payload: LoginRequest) {
+  const { data } = await api.post('/auth/login', payload)
+  return data as LoginResponse
 }
 
 export async function getWaveCanvas(id: string) {

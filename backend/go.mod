@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/gin-contrib/gzip v1.2.5
 	github.com/gin-gonic/gin v1.11.0
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	golang.org/x/text v0.33.0
 )
 

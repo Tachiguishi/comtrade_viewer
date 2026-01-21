@@ -20,6 +20,12 @@ func main() {
 	dataRoot := filepath.Join(".", "data")
 	_ = ensureDir(dataRoot)
 
+	// 登录接口无需鉴权，需在中间件前注册
+	jwtSecret := registerAuthRoutes(r)
+
+	// 全局鉴权
+	r.Use(authMiddleware(jwtSecret))
+
 	// 注册 COMTRADE 相关路由
 	registerComtradeRoutes(r, dataRoot)
 
@@ -29,9 +35,9 @@ func main() {
 // --- Error handling helpers ---
 
 type apiError struct {
-	Code    string      `json:"code"`
-	Message string      `json:"message"`
-	Details any         `json:"details,omitempty"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Details any    `json:"details,omitempty"`
 }
 
 func writeError(c *gin.Context, status int, code string, message string, details any) {
