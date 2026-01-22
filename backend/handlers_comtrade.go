@@ -592,6 +592,39 @@ func registerComtradeRoutes(r *gin.Engine, dataRoot string) {
         c.JSON(http.StatusOK, gin.H{"id": ann["id"]})
     })
 
+    r.PUT("/api/datasets/:id/annotations/:annId", func(c *gin.Context) {
+        id := c.Param("id")
+        annID := c.Param("annId")
+        p := filepath.Join(dataRoot, id, "annotations.json")
+        var updatedAnn map[string]any
+        if err := c.BindJSON(&updatedAnn); err != nil {
+            writeError(c, http.StatusBadRequest, "BAD_JSON", "JSON格式错误", gin.H{"detail": err.Error()})
+            return
+        }
+        var out []map[string]any
+        if b, err := os.ReadFile(p); err == nil {
+            _ = json.Unmarshal(b, &out)
+        }
+        found := false
+        for i, a := range out {
+            if v, ok := a["id"].(string); ok && v == annID {
+                updatedAnn["id"] = annID
+                out[i] = updatedAnn
+                found = true
+                break
+            }
+        }
+        if !found {
+            writeError(c, http.StatusNotFound, "ANNOTATION_NOT_FOUND", "未找到指定标注", gin.H{"annId": annID})
+            return
+        }
+        if err := writeJSON(p, out); err != nil {
+            writeError(c, http.StatusInternalServerError, "ANNOTATIONS_WRITE_ERROR", "写入标注失败", gin.H{"detail": err.Error()})
+            return
+        }
+        c.JSON(http.StatusOK, gin.H{"ok": true})
+    })
+
     r.DELETE("/api/datasets/:id/annotations/:annId", func(c *gin.Context) {
         id := c.Param("id")
         annID := c.Param("annId")

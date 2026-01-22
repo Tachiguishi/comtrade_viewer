@@ -171,3 +171,44 @@ export async function importDatasetWithProgress(
   })
   return data as { datasetId: string; name: string }
 }
+
+// Annotation type definition
+export type Annotation = {
+  id?: string
+  type: 'marker' | 'region'
+  time?: number // for marker
+  startTime?: number // for region
+  endTime?: number // for region
+  label: string
+  color?: string
+  description?: string
+}
+
+export async function getAnnotations(datasetId: string) {
+  const { data } = await api.get<Annotation[]>(`/datasets/${datasetId}/annotations`)
+  return data
+}
+
+export async function createAnnotation(datasetId: string, annotation: Annotation) {
+  const { data } = await api.post<{ id: string }>(`/datasets/${datasetId}/annotations`, annotation)
+  return data
+}
+
+export async function updateAnnotation(
+  datasetId: string,
+  annotationId: string,
+  annotation: Annotation,
+) {
+  const { data } = await api.put<{ ok: boolean }>(
+    `/datasets/${datasetId}/annotations/${annotationId}`,
+    annotation,
+  )
+  return data
+}
+
+export async function deleteAnnotation(datasetId: string, annotationId: string) {
+  const { data } = await api.delete<{ ok: boolean }>(
+    `/datasets/${datasetId}/annotations/${annotationId}`,
+  )
+  return data
+}

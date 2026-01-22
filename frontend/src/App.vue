@@ -15,7 +15,9 @@
             </div>
           </n-layout-header>
           <n-layout-content style="height: calc(100vh - 64px)">
-            <router-view />
+            <n-dialog-provider>
+              <router-view />
+            </n-dialog-provider>
           </n-layout-content>
         </n-layout>
       </template>
