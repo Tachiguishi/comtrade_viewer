@@ -86,16 +86,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import {
-  // NSpace,
-  // NFormItem,
-  // NUpload,
-  // NButton,
-  // NProgress,
-  // NAlert,
-  // NCode,
-  type UploadFileInfo,
-} from 'naive-ui'
+import { type UploadFileInfo } from 'naive-ui'
 import { useDatasetStore } from '../stores/dataset'
 
 const datasetStore = useDatasetStore()
@@ -115,6 +106,10 @@ const validationError = computed(() => {
   if (!datOk) return '请选择后缀为 .dat 的数据文件'
   if (cfgFile.value.size === 0) return '配置文件为空'
   if (datFile.value.size === 0) return '数据文件为空'
+  // 检测文件名是否匹配
+  const cfgBase = cfgFile.value.name.slice(0, -4)
+  const datBase = datFile.value.name.slice(0, -4)
+  if (cfgBase !== datBase) return '配置文件和数据文件的文件名不匹配'
   return ''
 })
 

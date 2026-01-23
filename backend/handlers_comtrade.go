@@ -65,7 +65,8 @@ func listDatasets(stor storage.Storage) ([]DatasetInfo, error) {
 			size, _ := stor.GetFileSize(ctx, file)
 			info := datasets[id]
 			info.DatasetID = id
-			info.Name = parts[1]
+			// remove extension for name
+			info.Name = strings.TrimSuffix(parts[1], filepath.Ext(parts[1]))
 			info.SizeBytes += size
 			datasets[id] = info
 		}

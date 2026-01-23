@@ -7,9 +7,9 @@
             <n-tag type="info" size="small">站点: {{ datasetStore.metadata?.station }}</n-tag>
             <n-tag type="info" size="small">设备: {{ datasetStore.metadata?.relay }}</n-tag>
             <n-tag type="info" size="small">版本: {{ datasetStore.metadata?.version }}</n-tag>
-            <n-tag type="info" size="small"
-              >数据类型: {{ datasetStore.metadata?.dataFileType.toUpperCase() }}</n-tag
-            >
+            <n-tag type="info" size="small">{{
+              datasetStore.metadata?.dataFileType.toUpperCase()
+            }}</n-tag>
             <n-tag type="info" size="small"
               >额定频率: {{ datasetStore.metadata?.frequency }}Hz</n-tag
             >
