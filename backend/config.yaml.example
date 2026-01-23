@@ -1,0 +1,22 @@
+# ComtradeViewer 配置文件
+
+# 存储配置
+storage:
+  # 存储类型: local 或 minio
+  type: local
+  
+  # 本地存储配置 (当 type: local 时使用)
+  local:
+    basePath: ./data
+  
+  # MinIO 存储配置 (当 type: minio 时使用)
+  minio:
+    endpoint: minio.example.com:9000
+    accessKeyId: minioadmin
+    secretAccessKey: minioadmin
+    bucketName: comtrade-data
+    useSSL: false
+
+# 服务器配置
+server:
+  port: 8080

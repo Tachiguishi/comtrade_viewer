@@ -24,7 +24,7 @@ func registerAuthRoutes(r *gin.Engine) string {
 	// Auth config
 	username := getEnv("AUTH_USERNAME", "admin")
 	password := getEnv("AUTH_PASSWORD", "admin123")
-	secret := getEnv("AUTH_SECRET", "change-me")
+	secret := getEnv("AUTH_SECRET", "supersecretkey")
 	ttl := 24 * time.Hour
 
 	r.POST("/api/auth/login", func(c *gin.Context) {

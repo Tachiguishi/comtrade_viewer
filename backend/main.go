@@ -1,10 +1,13 @@
 package main
 
 import (
-	"mime/multipart"
+	"fmt"
+	"log"
 	"os"
-	"path/filepath"
 	"strings"
+
+	"comtradeviewer/config"
+	"comtradeviewer/storage"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,8 +20,20 @@ func main() {
 	r := gin.Default()
 	r.MaxMultipartMemory = 128 << 20 // 128MB
 
-	dataRoot := filepath.Join(".", "data")
-	_ = ensureDir(dataRoot)
+	// 加载配置文件
+	cfg, err := config.LoadConfig("config.yaml")
+	if err != nil {
+		log.Printf("Failed to load config: %v, using default config", err)
+	}
+
+	// 初始化存储
+	stor, err := storage.NewStorage(cfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize storage: %v", err)
+	}
+	defer stor.Close()
+
+	log.Printf("Storage initialized: type=%s", cfg.Storage.Type)
 
 	// 登录接口无需鉴权，需在中间件前注册
 	jwtSecret := registerAuthRoutes(r)
@@ -27,9 +42,11 @@ func main() {
 	r.Use(authMiddleware(jwtSecret))
 
 	// 注册 COMTRADE 相关路由
-	registerComtradeRoutes(r, dataRoot)
+	registerComtradeRoutes(r, stor)
 
-	r.Run(":8080")
+	addr := fmt.Sprintf(":%d", cfg.Server.Port)
+	log.Printf("Starting server on %s", addr)
+	r.Run(addr)
 }
 
 // --- Error handling helpers ---
@@ -42,20 +59,6 @@ type apiError struct {
 
 func writeError(c *gin.Context, status int, code string, message string, details any) {
 	c.JSON(status, gin.H{"error": apiError{Code: code, Message: message, Details: details}})
-}
-
-func hasFileField(fh *multipart.Form, field string) bool {
-	files := fh.File[field]
-	return len(files) > 0
-}
-
-func hasFileExt(fh *multipart.Form, field string, want string) bool {
-	files := fh.File[field]
-	if len(files) == 0 {
-		return false
-	}
-	name := files[0].Filename
-	return strings.EqualFold(filepath.Ext(name), want)
 }
 
 // toFriendlyParseError maps internal parse errors to user-friendly messages

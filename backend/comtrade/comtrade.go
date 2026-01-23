@@ -1,73 +1,42 @@
 package comtrade
 
 import (
+	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
-func findFileCaseInsensitive(directory, base, ext string) (string, error) {
-	ext = strings.TrimPrefix(ext, ".")
-	candidate := filepath.Join(directory, base+"."+ext)
-	if _, err := os.Stat(candidate); err == nil {
-		return candidate, nil
-	}
-	entries, err := os.ReadDir(directory)
+// ParseComtradeFromBytes 从字节数据解析COMTRADE文件
+func ParseComtradeFromBytes(cfgData []byte, datData []byte) (*Metadata, *ChannelData, error) {
+	cfg, err := ParseComtradeCFGFromBytes(cfgData)
 	if err != nil {
-		return "", fmt.Errorf("read dir %s: %w", directory, err)
-	}
-	target := strings.ToLower(base + "." + ext)
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if strings.ToLower(e.Name()) == target {
-			return filepath.Join(directory, e.Name()), nil
-		}
-	}
-	return "", fmt.Errorf("file not found (case-insensitive): %s", candidate)
-}
-
-func ParseComtrade(cfgPath string, datPath string) (*Metadata, *ChannelData, error) {
-	cfg, err := ParseComtradeCFGOnly(cfgPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse CFG file: %w", err)
+		return nil, nil, fmt.Errorf("failed to parse CFG data: %w", err)
 	}
 
-	dat, err := ParseComtradeWithMetadata(datPath, cfg)
+	dat, err := ParseComtradeWithMetadataFromBytes(datData, cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse DAT file: %w", err)
+		return nil, nil, fmt.Errorf("failed to parse DAT data: %w", err)
 	}
 
 	return cfg, dat, nil
 }
 
-func ParseComtradeCFGOnly(cfgPath string) (*Metadata, error) {
-	cfgFile, err := os.Open(cfgPath)
+// ParseComtradeCFGFromBytes 从字节数据解析CFG
+func ParseComtradeCFGFromBytes(cfgData []byte) (*Metadata, error) {
+	reader := bytes.NewReader(cfgData)
+	cfg, err := ParseCFGFile(reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open CFG file: %w", err)
-	}
-	defer cfgFile.Close()
-
-	cfg, err := ParseCFGFile(cfgFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse CFG file: %w", err)
+		return nil, fmt.Errorf("failed to parse CFG data: %w", err)
 	}
 
 	return cfg, nil
 }
 
-func ParseComtradeWithMetadata(datPath string, meta *Metadata) (*ChannelData, error) {
-	datFile, err := os.Open(datPath)
+// ParseComtradeWithMetadataFromBytes 从字节数据解析DAT
+func ParseComtradeWithMetadataFromBytes(datData []byte, meta *Metadata) (*ChannelData, error) {
+	reader := bytes.NewReader(datData)
+	dat, err := ParseDATFile(reader, meta)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open DAT file: %w", err)
-	}
-	defer datFile.Close()
-
-	dat, err := ParseDATFile(datFile, meta)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse DAT file: %w", err)
+		return nil, fmt.Errorf("failed to parse DAT data: %w", err)
 	}
 
 	return dat, nil

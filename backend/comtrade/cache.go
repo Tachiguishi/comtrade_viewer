@@ -12,32 +12,32 @@ type cacheEntry struct {
 	timestamp time.Time
 }
 
-type datasetCache struct {
+type DatasetCache struct {
 	mu      sync.RWMutex
 	cache   map[string]*cacheEntry
 	maxSize int
 }
 
-func NewDatasetCache(size int) *datasetCache {
-	return &datasetCache{
+func NewDatasetCache(size int) *DatasetCache {
+	return &DatasetCache{
 		cache:   make(map[string]*cacheEntry),
 		maxSize: size,
 	}
 }
 
-func (dc *datasetCache) Clear() {
+func (dc *DatasetCache) Clear() {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 	dc.cache = make(map[string]*cacheEntry)
 }
 
-func (dc *datasetCache) Size() int {
+func (dc *DatasetCache) Size() int {
 	dc.mu.RLock()
 	defer dc.mu.RUnlock()
 	return len(dc.cache)
 }
 
-func (dc *datasetCache) Get(id string) (*Metadata, *ChannelData, bool) {
+func (dc *DatasetCache) Get(id string) (*Metadata, *ChannelData, bool) {
 	dc.mu.RLock()
 	defer dc.mu.RUnlock()
 
@@ -50,7 +50,7 @@ func (dc *datasetCache) Get(id string) (*Metadata, *ChannelData, bool) {
 	return nil, nil, false
 }
 
-func (dc *datasetCache) Set(id string, meta *Metadata, dat *ChannelData) {
+func (dc *DatasetCache) Set(id string, meta *Metadata, dat *ChannelData) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 

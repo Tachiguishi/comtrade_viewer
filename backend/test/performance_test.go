@@ -23,7 +23,15 @@ func BenchmarkDATFileParsing(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, err := comtrade.ParseComtrade(cfgPath, datPath)
+		cfgData, err := os.ReadFile(cfgPath)
+		if err != nil {
+			b.Fatalf("Failed to read CFG file: %v", err)
+		}
+		datData, err := os.ReadFile(datPath)
+		if err != nil {
+			b.Fatalf("Failed to read DAT file: %v", err)
+		}
+		_, _, err = comtrade.ParseComtradeFromBytes(cfgData, datData)
 		if err != nil {
 			b.Fatalf("Failed to parse: %v", err)
 		}
@@ -47,7 +55,15 @@ func TestCachingPerformance(t *testing.T) {
 	t.Run("DirectParsing", func(t *testing.T) {
 		start := time.Now()
 		for range numRequests {
-			_, _, err := comtrade.ParseComtrade(cfgPath, datPath)
+			cfgData, err := os.ReadFile(cfgPath)
+			if err != nil {
+				t.Fatalf("Failed to read CFG file: %v", err)
+			}
+			datData, err := os.ReadFile(datPath)
+			if err != nil {
+				t.Fatalf("Failed to read DAT file: %v", err)
+			}
+			_, _, err = comtrade.ParseComtradeFromBytes(cfgData, datData)
 			if err != nil {
 				t.Fatalf("Failed to parse: %v", err)
 			}
@@ -62,7 +78,15 @@ func TestCachingPerformance(t *testing.T) {
 
 		// First request: parse and cache
 		start := time.Now()
-		meta, dat, err := comtrade.ParseComtrade(cfgPath, datPath)
+		cfgData, err := os.ReadFile(cfgPath)
+		if err != nil {
+			t.Fatalf("Failed to read CFG file: %v", err)
+		}
+		datData, err := os.ReadFile(datPath)
+		if err != nil {
+			t.Fatalf("Failed to read DAT file: %v", err)
+		}
+		meta, dat, err := comtrade.ParseComtradeFromBytes(cfgData, datData)
 		if err != nil {
 			t.Fatalf("Failed to parse: %v", err)
 		}
@@ -88,7 +112,15 @@ func TestCachingPerformance(t *testing.T) {
 
 	// Test 3: JSON serialization overhead
 	t.Run("JSONSerialization", func(t *testing.T) {
-		meta, dat, err := comtrade.ParseComtrade(cfgPath, datPath)
+		cfgData, err := os.ReadFile(cfgPath)
+		if err != nil {
+			t.Fatalf("Failed to read CFG file: %v", err)
+		}
+		datData, err := os.ReadFile(datPath)
+		if err != nil {
+			t.Fatalf("Failed to read DAT file: %v", err)
+		}
+		meta, dat, err := comtrade.ParseComtradeFromBytes(cfgData, datData)
 		if err != nil {
 			t.Fatalf("Failed to parse: %v", err)
 		}
@@ -114,7 +146,15 @@ func TestCachingPerformance(t *testing.T) {
 
 	// Test 4: Downsampling performance
 	t.Run("Downsampling", func(t *testing.T) {
-		meta, dat, err := comtrade.ParseComtrade(cfgPath, datPath)
+		cfgData, err := os.ReadFile(cfgPath)
+		if err != nil {
+			t.Fatalf("Failed to read CFG file: %v", err)
+		}
+		datData, err := os.ReadFile(datPath)
+		if err != nil {
+			t.Fatalf("Failed to read DAT file: %v", err)
+		}
+		meta, dat, err := comtrade.ParseComtradeFromBytes(cfgData, datData)
 		if err != nil {
 			t.Fatalf("Failed to parse: %v", err)
 		}
@@ -163,7 +203,15 @@ func TestLTTBDownsampling(t *testing.T) {
 		t.Skip("Test files not found")
 	}
 
-	meta, dat, err := comtrade.ParseComtrade(cfgPath, datPath)
+	cfgData, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("Failed to read CFG file: %v", err)
+	}
+	datData, err := os.ReadFile(datPath)
+	if err != nil {
+		t.Fatalf("Failed to read DAT file: %v", err)
+	}
+	meta, dat, err := comtrade.ParseComtradeFromBytes(cfgData, datData)
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}

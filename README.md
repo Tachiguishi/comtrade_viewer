@@ -39,7 +39,7 @@ This starts both backend (`:8080`) and frontend (`:5173`) in one command.
 ```bash
 cd backend
 go mod tidy
-go run main.go
+go run .
 ```
 
 **Terminal 2 - Frontend:**
