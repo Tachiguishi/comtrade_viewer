@@ -167,9 +167,11 @@ func TestCachingPerformance(t *testing.T) {
 		timestamps := comtrade.ComputeTimeAxisFromMeta(*meta, dat.Timestamps, len(dat.Timestamps))
 
 		// Create test y data
+		indexes := make([]int, len(timestamps))
 		y := make([]float64, len(chData.RawData))
 		for i, d := range chData.RawData {
 			y[i] = float64(d)
+			indexes[i] = i
 		}
 
 		originalPoints := len(y)
@@ -177,7 +179,7 @@ func TestCachingPerformance(t *testing.T) {
 
 		// Benchmark LTTB downsampling
 		start := time.Now()
-		_, newY := comtrade.DownsampleLTTB(timestamps, y, targetPoints)
+		_, newY := comtrade.DownsampleLTTB(timestamps, indexes, y, targetPoints)
 		downsampleTime := time.Since(start)
 
 		t.Logf("LTTB downsampling: %v, %d -> %d points (%.1f%% reduction)",
@@ -223,15 +225,17 @@ func TestLTTBDownsampling(t *testing.T) {
 	chData := dat.AnalogChannels[0]
 	timestamps := comtrade.ComputeTimeAxisFromMeta(*meta, dat.Timestamps, len(dat.Timestamps))
 
+	indexes := make([]int, len(timestamps))
 	y := make([]float64, len(chData.RawData))
 	for i, d := range chData.RawData {
 		y[i] = float64(d)
+		indexes[i] = i
 	}
 
 	// Test various target point counts
 	targetCounts := []int{100, 500, 1000, 5000}
 	for _, target := range targetCounts {
-		newT, newY := comtrade.DownsampleLTTB(timestamps, y, target)
+		newT, newY := comtrade.DownsampleLTTB(timestamps, indexes, y, target)
 
 		if len(newT) != len(newY) {
 			t.Errorf("Times and Y mismatch: %d vs %d", len(newT), len(newY))
@@ -242,10 +246,10 @@ func TestLTTBDownsampling(t *testing.T) {
 		}
 
 		// Verify first and last points are preserved
-		if newT[0] != timestamps[0] || newY[0] != y[0] {
+		if newT[0] != indexes[0] || newY[0] != y[0] {
 			t.Errorf("First point not preserved")
 		}
-		if newT[len(newT)-1] != timestamps[len(timestamps)-1] || newY[len(newY)-1] != y[len(y)-1] {
+		if newT[len(newT)-1] != indexes[len(indexes)-1] || newY[len(newY)-1] != y[len(y)-1] {
 			t.Errorf("Last point not preserved")
 		}
 

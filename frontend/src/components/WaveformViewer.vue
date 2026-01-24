@@ -25,7 +25,25 @@
             </n-tooltip>
             <n-tag type="default" size="small">开始: {{ datasetStore.metadata?.startTime }}</n-tag>
           </n-space>
-          <n-button type="primary" @click="refreshData()" :loading="loading"> 刷新视图 </n-button>
+          <n-space>
+            <n-button-group>
+              <n-button
+                :type="xAxesType === XAxesType.Index ? 'primary' : 'default'"
+                @click="xAxesType = XAxesType.Index"
+                size="small"
+              >
+                索引模式
+              </n-button>
+              <n-button
+                :type="xAxesType === XAxesType.Time ? 'primary' : 'default'"
+                @click="xAxesType = XAxesType.Time"
+                size="small"
+              >
+                时间模式
+              </n-button>
+            </n-button-group>
+            <n-button type="primary" @click="refreshData()" :loading="loading"> 刷新视图 </n-button>
+          </n-space>
         </n-space>
       </template>
       <div ref="chartRef" class="chart"></div>
@@ -43,12 +61,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted, shallowRef } from 'vue'
+import { ref, onMounted, watch, onUnmounted, shallowRef, reactive } from 'vue'
 import * as echarts from 'echarts'
-import { NCard, NSpace, NTag, NButton, NSpin, NAlert } from 'naive-ui'
+import { NCard, NSpace, NTag, NButton, NButtonGroup, NSpin, NAlert } from 'naive-ui'
 import { useDatasetStore } from '../stores/dataset'
 import { useViewStore } from '../stores/view'
-import { getWaveforms } from '../api'
+import { getWaveforms, type ChannelValue } from '../api'
 
 const datasetStore = useDatasetStore()
 const viewStore = useViewStore()
@@ -56,10 +74,18 @@ const chartRef = ref<HTMLElement>()
 const chartInstance = shallowRef<echarts.ECharts>()
 const loading = ref(false)
 const sampleCount = ref(0)
+let channelValues = reactive<Array<ChannelValue>>([])
+let timestamps = reactive<Array<number>>([])
+
+enum XAxesType {
+  Time = 'time',
+  Index = 'index',
+}
 
 // Track initial data bounds for keeping X-axis consistent
 let initialWindow = { start: 0, end: 0 }
 const lastWindow = { start: 0, end: 0 }
+const xAxesType = ref<XAxesType>(XAxesType.Index)
 
 onMounted(() => {
   if (chartRef.value) {
@@ -98,6 +124,15 @@ watch(
   },
 )
 
+watch(
+  () => xAxesType.value,
+  () => {
+    // Reset initial window when xAxesType changes
+    initialWindow = { start: 0, end: 0 }
+    refreshData()
+  },
+)
+
 async function refreshData(startTime?: number, endTime?: number) {
   if (
     !datasetStore.currentId ||
@@ -121,18 +156,30 @@ async function refreshData(startTime?: number, endTime?: number) {
       endTime,
     )
 
+    timestamps = data.times
     // Store initial window on first load
     if (initialWindow.start === 0 && initialWindow.end === 0) {
-      initialWindow = { start: data.window.start, end: data.window.end }
+      if (xAxesType.value === XAxesType.Index)
+        initialWindow = { start: 0, end: timestamps.length - 1 }
+      else {
+        initialWindow = { start: timestamps[0]!, end: timestamps[timestamps.length - 1]! }
+      }
     }
 
     // Calculate zoom percentages if this is a zoomed refresh
     const span = initialWindow.end - initialWindow.start
-    const zoomStartPct = ((data.timeRange.start - initialWindow.start) / span) * 100
-    const zoomEndPct = ((data.timeRange.end - initialWindow.start) / span) * 100
+    let zoomStartPct: number = 0
+    let zoomEndPct: number = 100
+    if (xAxesType.value === XAxesType.Index) {
+      zoomStartPct = ((data.window.start - initialWindow.start) / span) * 100
+      zoomEndPct = ((data.window.end - initialWindow.start) / span) * 100
+    } else {
+      zoomStartPct = ((timestamps[data.window.start]! - initialWindow.start) / span) * 100
+      zoomEndPct = ((timestamps[data.window.end]! - initialWindow.start) / span) * 100
+    }
 
     // 规范化数字通道数据：确保值只有0和1
-    const normalizedSeries = data.series.map((s) => {
+    channelValues = data.series.map((s) => {
       if (s.type === 'digital') {
         // 对于数字通道，规范化值为0或1
         const normalizedY = s.y.map((val) => (val !== 0 ? 1 : 0))
@@ -141,11 +188,11 @@ async function refreshData(startTime?: number, endTime?: number) {
       return s
     })
 
-    // sampleCount.value = data.times.length
-    const seriesCount = normalizedSeries.length
+    // sampleCount.value = timestamps.length
+    const seriesCount = channelValues.length
     const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
 
-    sampleCount.value = data.downsample.originalPoints
+    sampleCount.value = timestamps.length
 
     // 预留顶部/底部空间给标题/缩放器，按百分比垂直堆叠各 grid
     const plotAreaPct = 95 // 95% 高度作为绘图区
@@ -154,24 +201,24 @@ async function refreshData(startTime?: number, endTime?: number) {
     const LEFT_MARGIN_PX = 50
     const RIGHT_MARGIN_PX = 30
 
-    const grids = normalizedSeries.map((_, i) => ({
+    const grids = channelValues.map((_, i) => ({
       left: LEFT_MARGIN_PX,
       right: RIGHT_MARGIN_PX,
       top: `${topMarginPct + i * perGridPct}%`,
       height: `${perGridPct - 4}%`,
     }))
 
-    const xAxes = normalizedSeries.map((_, i) => ({
+    const xAxes = channelValues.map((_, i) => ({
       min: initialWindow.start,
       max: initialWindow.end,
       gridIndex: i,
       axisLabel: {
         show: i === seriesCount - 1,
         formatter: (value: number) => {
-          if (i !== seriesCount - 1) {
-            return value.toFixed(0)
+          if (xAxesType.value === XAxesType.Index) {
+            return timestamps[value]!.toFixed(0) + ' ms' || ''
           }
-          return value.toFixed(0) + ' ms'
+          return value + ' ms'
         },
       },
       axisTick: { show: false },
@@ -179,7 +226,7 @@ async function refreshData(startTime?: number, endTime?: number) {
       splitLine: { show: true },
     }))
 
-    const yAxes = normalizedSeries.map((s, i) => {
+    const yAxes = channelValues.map((s, i) => {
       const isDigital = s.type === 'digital'
       const yAxisConfig: Record<string, unknown> = {
         scale: !isDigital, // 开关量不使用自动缩放
@@ -224,7 +271,7 @@ async function refreshData(startTime?: number, endTime?: number) {
     const chartWidth = chartRef.value?.clientWidth || DEFAULT_CHART_WIDTH
 
     // 为每个子图添加底部边框线
-    const graphicElements = normalizedSeries.flatMap((_, i) => {
+    const graphicElements = channelValues.flatMap((_, i) => {
       const bottomY = `${topMarginPct + (i + 1) * perGridPct - 4}%`
 
       return [
@@ -263,21 +310,25 @@ async function refreshData(startTime?: number, endTime?: number) {
           },
         },
         formatter: function (params) {
-          // 根据normalizedSeries中的顺序排序显示
+          // 根据channelValues中的顺序排序显示
           const sortedParams = Array.isArray(params)
             ? params.slice().sort((a, b) => {
-                const seriesA = normalizedSeries.findIndex((s) => s.name === a.seriesName)
-                const seriesB = normalizedSeries.findIndex((s) => s.name === b.seriesName)
+                const seriesA = channelValues.findIndex((s) => s.name === a.seriesName)
+                const seriesB = channelValues.findIndex((s) => s.name === b.seriesName)
                 return seriesA - seriesB
               })
             : []
           if (sortedParams.length === 0) return ''
           // show x value at top
-          const xValue = Array.isArray(sortedParams[0]?.data)
+          let xValue = Array.isArray(sortedParams[0]?.data)
             ? sortedParams[0].data[0]
             : sortedParams[0]?.data
+          if (xAxesType.value === XAxesType.Index) {
+            // 显示为时间戳
+            xValue = timestamps[xValue as number] || 0
+          }
           return (
-            `${xValue}<br/>` +
+            `${xValue} ms<br/>` +
             sortedParams
               .map((item) => {
                 const yValue = Array.isArray(item.data) ? item.data[1] : item.data
@@ -294,7 +345,7 @@ async function refreshData(startTime?: number, endTime?: number) {
       xAxis: xAxes,
       yAxis: yAxes,
       graphic: graphicElements,
-      series: normalizedSeries.map((s, i) => {
+      series: channelValues.map((s, i) => {
         // 根据通道类型选择不同的渲染方式
         const isDigital = s.type === 'digital'
 
@@ -305,7 +356,12 @@ async function refreshData(startTime?: number, endTime?: number) {
           showSymbol: false,
           xAxisIndex: i,
           yAxisIndex: i,
-          data: s.y.map((y, k) => [s.times[k], y]),
+          data: s.y.map((y, k) => {
+            if (xAxesType.value === XAxesType.Index) {
+              return [s.times[k], y]
+            }
+            return [timestamps[s.times[k]!], y]
+          }),
           animation: false,
           smooth: isDigital ? false : true, // 只给模拟量平滑处理
           lineStyle: {
@@ -353,8 +409,12 @@ function handleDataZoom(params: unknown) {
   const startPct: number = typeof dz.start === 'number' ? dz.start : 0
   const endPct: number = typeof dz.end === 'number' ? dz.end : 100
   const span = initialWindow.end - initialWindow.start
-  const zoomStart = initialWindow.start + (startPct / 100) * span
-  const zoomEnd = initialWindow.start + (endPct / 100) * span
+  let zoomStart = initialWindow.start + (startPct / 100) * span
+  let zoomEnd = initialWindow.start + (endPct / 100) * span
+  if (xAxesType.value === XAxesType.Time) {
+    zoomStart = timestamps[0]! + (startPct / 100) * span
+    zoomEnd = timestamps[0]! + (endPct / 100) * span
+  }
 
   // Only reload if zoomed significantly (more than 10% of range)
   const threshold = (lastWindow.end - lastWindow.start) * 0.1

@@ -45,19 +45,19 @@ export type Metadata = {
   dataFileType: string
   timeMultiplier: number
 }
+export type ChannelValue = {
+  channel: number
+  type: string
+  name: string
+  unit: string
+  times: number[]
+  y: number[]
+}
 export type WaveData = {
-  series: {
-    channel: number
-    type: string
-    name: string
-    unit: string
-    times: number[]
-    y: number[]
-  }[]
+  series: ChannelValue[]
   times: number[]
   window: { start: number; end: number }
-  timeRange: { start: number; end: number }
-  downsample: { method: string; targetPoints: number; originalPoints: number }
+  downsample: { method: string; targetPoints: number }
 }
 
 type LoginRequest = { username: string; password: string }

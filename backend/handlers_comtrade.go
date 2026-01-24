@@ -319,36 +319,35 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 		// 时间轴
 		timestamps := comtrade.ComputeTimeAxisFromMeta(*meta, dat.Timestamps, len(dat.Timestamps))
 
-		// 时间范围: 默认显示10%数据点的范围
-		startTime := timestamps[0]
+		// 时间范围: 默认显示20%数据点的范围
+		startTimeIndex := 0
 		endTimeIndex := int(math.Max(5000, float64(len(timestamps)/20)))
-		if endTimeIndex >= len(timestamps) {
-			endTimeIndex = len(timestamps) - 1
-		}
-		endTime := timestamps[endTimeIndex]
 		if st := c.Query("startTime"); st != "" {
-			if v, err := strconv.ParseFloat(st, 32); err == nil {
-				startTime = float32(v)
+			if v, err := strconv.ParseInt(st, 10, 64); err == nil {
+				startTimeIndex = int(v)
 			}
 		}
 		if et := c.Query("endTime"); et != "" {
-			if v, err := strconv.ParseFloat(et, 32); err == nil {
-				endTime = float32(v)
+			if v, err := strconv.ParseInt(et, 10, 64); err == nil {
+				endTimeIndex = int(v)
 			}
+		}
+		if startTimeIndex < 0 {
+			startTimeIndex = 0
+		}
+		if endTimeIndex >= len(timestamps) {
+			endTimeIndex = len(timestamps) - 1
 		}
 
 		// 过滤时间范围
-		var filteredTimestamps []float32
 		var timeIndices []int
-		if (startTime != 0 || endTime != 0) && startTime < endTime {
-			for i, t := range timestamps {
-				if t >= startTime && t <= endTime {
+		if (startTimeIndex != 0 || endTimeIndex != 0) && startTimeIndex < endTimeIndex {
+			for i:= range timestamps {
+				if i >= startTimeIndex && i <= endTimeIndex {
 					timeIndices = append(timeIndices, i)
-					filteredTimestamps = append(filteredTimestamps, t)
 				}
 			}
 		} else {
-			filteredTimestamps = timestamps
 			timeIndices = make([]int, len(timestamps))
 			for i := range timestamps {
 				timeIndices[i] = i
@@ -359,9 +358,9 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 		needDownsample := false
 		switch downsampleMethod {
 		case "auto":
-			needDownsample = len(filteredTimestamps) > targetPoints*2
+			needDownsample = len(timeIndices) > targetPoints*2
 		case "lttb", "minmax":
-			needDownsample = len(filteredTimestamps) > targetPoints
+			needDownsample = len(timeIndices) > targetPoints
 		case "none":
 			needDownsample = false
 			downsampleMethod = "none"
@@ -410,17 +409,15 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 				}
 			}
 
-			var rangeTimestamps []float32
 			var rangeY []float64
 			for _, idx := range timeIndices {
-				rangeTimestamps = append(rangeTimestamps, timestamps[idx])
 				rangeY = append(rangeY, y[idx])
 			}
 
-			returnTimes := rangeTimestamps
+			returnTimes := timeIndices
 			returnY := rangeY
-			if needDownsample && len(rangeTimestamps) > 0 {
-				returnTimes, returnY = comtrade.DownsampleLTTB(rangeTimestamps, rangeY, targetPoints)
+			if needDownsample && len(timeIndices) > 0 {
+				returnTimes, returnY = comtrade.DownsampleLTTB(timestamps, timeIndices, rangeY, targetPoints)
 			}
 
 			series = append(series, map[string]any{
@@ -456,19 +453,17 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 			y := make([]int8, sampleLen)
 			copy(y, chData.RawData)
 
-			var rangeTimestamps []float32
 			var rangeY []int8
 			for _, idx := range timeIndices {
 				if idx < len(y) {
-					rangeTimestamps = append(rangeTimestamps, timestamps[idx])
 					rangeY = append(rangeY, y[idx])
 				}
 			}
 
-			returnTimes := rangeTimestamps
+			returnTimes := timeIndices
 			returnY := rangeY
-			if needDownsample && len(rangeTimestamps) > 0 {
-				returnTimes, returnY = comtrade.DownsampleDigital(rangeTimestamps, rangeY)
+			if needDownsample && len(timeIndices) > 0 {
+				returnTimes, returnY = comtrade.DownsampleDigital(timeIndices, rangeY)
 			}
 
 			series = append(series, map[string]any{
@@ -482,14 +477,13 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 
 		response := gin.H{
 			"series": series,
-			"window": map[string]float32{"start": timestamps[0], "end": timestamps[len(timestamps)-1]},
-			"timeRange": map[string]float32{"start": startTime, "end": endTime},
+			"times": timestamps,
+			"window": map[string]int{"start": startTimeIndex, "end": endTimeIndex},
 		}
 
 		response["downsample"] = map[string]any{
 			"method":         downsampleMethod,
 			"targetPoints":   targetPoints,
-			"originalPoints": len(timestamps),
 		}
 
 		c.JSON(http.StatusOK, response)

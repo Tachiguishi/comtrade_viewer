@@ -72,17 +72,18 @@ func ComputeTimeAxisFromMeta(meta Metadata, timestamps []int32, sampleLen int) [
 
 // downsampleLTTB applies Largest-Triangle-Three-Buckets downsampling algorithm
 // Returns downsampled time and y arrays
-func DownsampleLTTB(timestamps []float32, y []float64, targetPoints int) ([]float32, []float64) {
+func DownsampleLTTB(timestamps []float32, timeIndices []int, y []float64, targetPoints int) ([]int, []float64) {
+	
 	n := len(y)
 	if n <= targetPoints || targetPoints < 3 {
-		return timestamps, y
+		return timeIndices, y
 	}
 
-	downsampledT := make([]float32, 0, targetPoints)
+	downsampledT := make([]int, 0, targetPoints)
 	downsampledY := make([]float64, 0, targetPoints)
 
 	// Always keep first point
-	downsampledT = append(downsampledT, timestamps[0])
+	downsampledT = append(downsampledT, timeIndices[0])
 	downsampledY = append(downsampledY, y[0])
 
 	bucketSize := float64(n-2) / float64(targetPoints-2)
@@ -97,7 +98,7 @@ func DownsampleLTTB(timestamps []float32, y []float64, targetPoints int) ([]floa
 		count := avgRangeEnd - avgRangeStart
 		if count > 0 {
 			for j := avgRangeStart; j < avgRangeEnd; j++ {
-				avgX += float64(timestamps[j])
+				avgX += float64(timestamps[timeIndices[j]])
 				avgY += y[j]
 			}
 			avgX /= float64(count)
@@ -115,47 +116,47 @@ func DownsampleLTTB(timestamps []float32, y []float64, targetPoints int) ([]floa
 		lastY := downsampledY[len(downsampledY)-1]
 
 		for j := rangeStart; j < rangeEnd; j++ {
-			area := math.Abs((lastX-avgX)*(y[j]-lastY)-(lastX-float64(timestamps[j]))*(avgY-lastY)) * 0.5
+			area := math.Abs((lastX-avgX)*(y[j]-lastY)-(lastX-float64(timestamps[timeIndices[j]]))*(avgY-lastY)) * 0.5
 			if area > maxArea {
 				maxArea = area
 				maxIdx = j
 			}
 		}
 
-		downsampledT = append(downsampledT, timestamps[maxIdx])
+		downsampledT = append(downsampledT, timeIndices[maxIdx])
 		downsampledY = append(downsampledY, y[maxIdx])
 	}
 
 	// Always keep last point
-	downsampledT = append(downsampledT, timestamps[n-1])
+	downsampledT = append(downsampledT, timeIndices[n-1])
 	downsampledY = append(downsampledY, y[n-1])
 
 	return downsampledT, downsampledY
 }
 
 // downsampleDigital downsamples digital signals by keeping state changes
-func DownsampleDigital(timestamps []float32, y []int8) ([]float32, []int8) {
+func DownsampleDigital(timeIndices []int, y []int8) ([]int, []int8) {
 	n := len(y)
 
 	// Keep all state changes and uniformly sample the rest
-	downsampledT := make([]float32, 0)
+	downsampledT := make([]int, 0)
 	downsampledY := make([]int8, 0)
 
 	// Always keep first point
-	downsampledT = append(downsampledT, timestamps[0])
+	downsampledT = append(downsampledT, timeIndices[0])
 	downsampledY = append(downsampledY, y[0])
 
 	// Find all state changes
 	for i := 1; i < n - 1; i++ {
 		// If current point differs from either neighbor, it's a state change
 		if y[i] != y[i+1] || y[i] != y[i-1] {
-			downsampledT = append(downsampledT, timestamps[i])
+			downsampledT = append(downsampledT, timeIndices[i])
 			downsampledY = append(downsampledY, y[i])
 		}
 	}
 
 	// Always keep last point
-	downsampledT = append(downsampledT, timestamps[n-1])
+	downsampledT = append(downsampledT, timeIndices[n-1])
 	downsampledY = append(downsampledY, y[n-1])
 
 	return downsampledT, downsampledY
