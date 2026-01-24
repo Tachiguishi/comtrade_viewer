@@ -23,7 +23,7 @@
                 </div>
               </div>
             </n-tooltip>
-            <n-tag type="default" size="small">开始: {{ datasetStore.metadata?.startTime }}</n-tag>
+            <n-tag type="default" size="small">开始: {{ startTime }}</n-tag>
           </n-space>
           <n-space>
             <n-button-group>
@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted, shallowRef, reactive } from 'vue'
+import { ref, onMounted, watch, onUnmounted, shallowRef, reactive, computed } from 'vue'
 import * as echarts from 'echarts'
 import { NCard, NSpace, NTag, NButton, NButtonGroup, NSpin, NAlert } from 'naive-ui'
 import { useDatasetStore } from '../stores/dataset'
@@ -106,6 +106,18 @@ onUnmounted(() => {
 function resizeChart() {
   chartInstance.value?.resize()
 }
+
+// startTime
+const startTime = computed(() => {
+  if (datasetStore.metadata?.startTime) {
+    // YYYY-MM-DD HH:mm:ss
+    return new Date(datasetStore.metadata.startTime)
+      .toISOString()
+      .replace('T', ' ')
+      .replace('Z', '')
+  }
+  return ''
+})
 
 // Watchers to trigger update
 watch(
