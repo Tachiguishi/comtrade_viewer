@@ -76,6 +76,7 @@ const loading = ref(false)
 const sampleCount = ref(0)
 let channelValues = reactive<Array<ChannelValue>>([])
 let timestamps = reactive<Array<number>>([])
+let xWindow = reactive<{ start: number; end: number }>({ start: 0, end: 0 })
 
 enum XAxesType {
   Time = 'time',
@@ -129,9 +130,232 @@ watch(
   () => {
     // Reset initial window when xAxesType changes
     initialWindow = { start: 0, end: 0 }
-    refreshData()
+    renderChart()
   },
 )
+
+function renderChart() {
+  // Store initial window on first load
+  if (initialWindow.start === 0 && initialWindow.end === 0) {
+    if (xAxesType.value === XAxesType.Index)
+      initialWindow = { start: 0, end: timestamps.length - 1 }
+    else {
+      initialWindow = { start: timestamps[0]!, end: timestamps[timestamps.length - 1]! }
+    }
+  }
+
+  // Calculate zoom percentages if this is a zoomed refresh
+  const span = initialWindow.end - initialWindow.start
+  let zoomStartPct: number = 0
+  let zoomEndPct: number = 100
+  if (xAxesType.value === XAxesType.Index) {
+    zoomStartPct = ((xWindow.start - initialWindow.start) / span) * 100
+    zoomEndPct = ((xWindow.end - initialWindow.start) / span) * 100
+  } else {
+    zoomStartPct = ((timestamps[xWindow.start]! - initialWindow.start) / span) * 100
+    zoomEndPct = ((timestamps[xWindow.end]! - initialWindow.start) / span) * 100
+  }
+
+  // sampleCount.value = timestamps.length
+  const seriesCount = channelValues.length
+  const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
+
+  sampleCount.value = timestamps.length
+
+  // 预留顶部/底部空间给标题/缩放器，按百分比垂直堆叠各 grid
+  const plotAreaPct = 95 // 95% 高度作为绘图区
+  const topMarginPct = 4
+  const perGridPct = plotAreaPct / Math.max(seriesCount, 1)
+  const LEFT_MARGIN_PX = 50
+  const RIGHT_MARGIN_PX = 30
+
+  const grids = channelValues.map((_, i) => ({
+    left: LEFT_MARGIN_PX,
+    right: RIGHT_MARGIN_PX,
+    top: `${topMarginPct + i * perGridPct}%`,
+    height: `${perGridPct - 4}%`,
+  }))
+
+  const xAxes = channelValues.map((_, i) => ({
+    min: initialWindow.start,
+    max: initialWindow.end,
+    gridIndex: i,
+    axisLabel: {
+      show: i === seriesCount - 1,
+      formatter: (value: number) => {
+        if (xAxesType.value === XAxesType.Index) {
+          return timestamps[value] + ' ms' || ''
+        }
+        return value + ' ms'
+      },
+    },
+    axisTick: { show: false },
+    axisLine: { show: false },
+    splitLine: { show: true },
+  }))
+
+  const yAxes = channelValues.map((s, i) => {
+    const isDigital = s.type === 'digital'
+    const yAxisConfig: Record<string, unknown> = {
+      scale: !isDigital, // 开关量不使用自动缩放
+      gridIndex: i,
+      name: s.unit ? `${s.name} (${s.unit})` : s.name,
+      nameTextStyle: {
+        align: 'left' as const,
+        padding: [0, 0, -5, -LEFT_MARGIN_PX],
+      },
+      axisLabel: {
+        show: true,
+      },
+      splitLine: { show: true },
+    }
+
+    // 为开关量配置Y轴：只显示0和1
+    if (isDigital) {
+      yAxisConfig.min = -0.1
+      yAxisConfig.max = 1.1
+      yAxisConfig.type = 'value'
+      yAxisConfig.axisLabel = {
+        formatter: (value: number) => {
+          if (value === 0) return '0'
+          if (value === 1) return '1'
+          return ''
+        },
+        showMinLabel: true,
+        showMaxLabel: true,
+      }
+      yAxisConfig.splitLine = { show: false }
+      yAxisConfig.axisTick = {
+        show: true,
+        length: 3,
+      }
+    }
+
+    return yAxisConfig
+  })
+
+  // 获取图表容器宽度
+  const DEFAULT_CHART_WIDTH = 800
+  const chartWidth = chartRef.value?.clientWidth || DEFAULT_CHART_WIDTH
+
+  // 为每个子图添加底部边框线
+  const graphicElements = channelValues.flatMap((_, i) => {
+    const bottomY = `${topMarginPct + (i + 1) * perGridPct - 4}%`
+
+    return [
+      {
+        type: 'line',
+        right: RIGHT_MARGIN_PX,
+        top: bottomY,
+        shape: {
+          x1: 0,
+          y1: 0,
+          x2: chartWidth - RIGHT_MARGIN_PX,
+          y2: 0,
+        },
+        style: {
+          stroke: '#aaa',
+          lineWidth: 1,
+        },
+        z: 0,
+      },
+    ]
+  })
+
+  const option: echarts.EChartsOption = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross',
+        link: [{ xAxisIndex: 'all' }],
+        crossStyle: {
+          color: '#999',
+          width: 1,
+          type: 'dashed',
+        },
+        label: {
+          show: false,
+        },
+      },
+      formatter: function (params) {
+        // 根据channelValues中的顺序排序显示
+        const sortedParams = Array.isArray(params)
+          ? params.slice().sort((a, b) => {
+              const seriesA = channelValues.findIndex((s) => s.name === a.seriesName)
+              const seriesB = channelValues.findIndex((s) => s.name === b.seriesName)
+              return seriesA - seriesB
+            })
+          : []
+        if (sortedParams.length === 0) return ''
+        // show x value at top
+        let xValue = Array.isArray(sortedParams[0]?.data)
+          ? sortedParams[0].data[0]
+          : sortedParams[0]?.data
+        if (xAxesType.value === XAxesType.Index) {
+          // 显示为时间戳
+          xValue = timestamps[xValue as number] || 0
+        }
+        return (
+          `${xValue} ms<br/>` +
+          sortedParams
+            .map((item) => {
+              const yValue = Array.isArray(item.data) ? item.data[1] : item.data
+              return `<span style="display:inline-block;margin-right:6px;width:8px;height:8px;border-radius:50%;background:${item.color};"></span>${item.seriesName}: ${yValue}`
+            })
+            .join('<br/>')
+        )
+      },
+    },
+    axisPointer: {
+      link: [{ xAxisIndex: 'all' }],
+    },
+    grid: grids,
+    xAxis: xAxes,
+    yAxis: yAxes,
+    graphic: graphicElements,
+    series: channelValues.map((s, i) => {
+      // 根据通道类型选择不同的渲染方式
+      const isDigital = s.type === 'digital'
+
+      return {
+        name: s.name,
+        type: 'line',
+        step: isDigital ? 'start' : false, // 开关量使用阶梯图
+        showSymbol: false,
+        xAxisIndex: i,
+        yAxisIndex: i,
+        data: s.y.map((y, k) => {
+          if (xAxesType.value === XAxesType.Index) {
+            return [s.times[k], y]
+          }
+          return [timestamps[s.times[k]!], y]
+        }),
+        animation: false,
+        smooth: isDigital ? false : true, // 只给模拟量平滑处理
+        lineStyle: {
+          type: isDigital ? 'solid' : 'solid',
+        },
+      }
+    }),
+    dataZoom: [
+      {
+        type: 'inside',
+        xAxisIndex: axesIndices,
+        start: zoomStartPct,
+        end: zoomEndPct,
+      },
+      {
+        type: 'slider',
+        xAxisIndex: axesIndices,
+        bottom: 0,
+        start: zoomStartPct,
+        end: zoomEndPct,
+      },
+    ],
+  }
+
+  chartInstance.value?.setOption(option, { notMerge: true })
+}
 
 async function refreshData(startTime?: number, endTime?: number) {
   if (
@@ -157,26 +381,7 @@ async function refreshData(startTime?: number, endTime?: number) {
     )
 
     timestamps = data.times
-    // Store initial window on first load
-    if (initialWindow.start === 0 && initialWindow.end === 0) {
-      if (xAxesType.value === XAxesType.Index)
-        initialWindow = { start: 0, end: timestamps.length - 1 }
-      else {
-        initialWindow = { start: timestamps[0]!, end: timestamps[timestamps.length - 1]! }
-      }
-    }
-
-    // Calculate zoom percentages if this is a zoomed refresh
-    const span = initialWindow.end - initialWindow.start
-    let zoomStartPct: number = 0
-    let zoomEndPct: number = 100
-    if (xAxesType.value === XAxesType.Index) {
-      zoomStartPct = ((data.window.start - initialWindow.start) / span) * 100
-      zoomEndPct = ((data.window.end - initialWindow.start) / span) * 100
-    } else {
-      zoomStartPct = ((timestamps[data.window.start]! - initialWindow.start) / span) * 100
-      zoomEndPct = ((timestamps[data.window.end]! - initialWindow.start) / span) * 100
-    }
+    xWindow = data.window
 
     // 规范化数字通道数据：确保值只有0和1
     channelValues = data.series.map((s) => {
@@ -188,207 +393,9 @@ async function refreshData(startTime?: number, endTime?: number) {
       return s
     })
 
-    // sampleCount.value = timestamps.length
-    const seriesCount = channelValues.length
-    const axesIndices = Array.from({ length: seriesCount }, (_, i) => i)
-
-    sampleCount.value = timestamps.length
-
-    // 预留顶部/底部空间给标题/缩放器，按百分比垂直堆叠各 grid
-    const plotAreaPct = 95 // 95% 高度作为绘图区
-    const topMarginPct = 4
-    const perGridPct = plotAreaPct / Math.max(seriesCount, 1)
-    const LEFT_MARGIN_PX = 50
-    const RIGHT_MARGIN_PX = 30
-
-    const grids = channelValues.map((_, i) => ({
-      left: LEFT_MARGIN_PX,
-      right: RIGHT_MARGIN_PX,
-      top: `${topMarginPct + i * perGridPct}%`,
-      height: `${perGridPct - 4}%`,
-    }))
-
-    const xAxes = channelValues.map((_, i) => ({
-      min: initialWindow.start,
-      max: initialWindow.end,
-      gridIndex: i,
-      axisLabel: {
-        show: i === seriesCount - 1,
-        formatter: (value: number) => {
-          if (xAxesType.value === XAxesType.Index) {
-            return timestamps[value]!.toFixed(0) + ' ms' || ''
-          }
-          return value + ' ms'
-        },
-      },
-      axisTick: { show: false },
-      axisLine: { show: false },
-      splitLine: { show: true },
-    }))
-
-    const yAxes = channelValues.map((s, i) => {
-      const isDigital = s.type === 'digital'
-      const yAxisConfig: Record<string, unknown> = {
-        scale: !isDigital, // 开关量不使用自动缩放
-        gridIndex: i,
-        name: s.unit ? `${s.name} (${s.unit})` : s.name,
-        nameTextStyle: {
-          align: 'left' as const,
-          padding: [0, 0, -5, -LEFT_MARGIN_PX],
-        },
-        axisLabel: {
-          show: true,
-        },
-        splitLine: { show: true },
-      }
-
-      // 为开关量配置Y轴：只显示0和1
-      if (isDigital) {
-        yAxisConfig.min = -0.1
-        yAxisConfig.max = 1.1
-        yAxisConfig.type = 'value'
-        yAxisConfig.axisLabel = {
-          formatter: (value: number) => {
-            if (value === 0) return '0'
-            if (value === 1) return '1'
-            return ''
-          },
-          showMinLabel: true,
-          showMaxLabel: true,
-        }
-        yAxisConfig.splitLine = { show: false }
-        yAxisConfig.axisTick = {
-          show: true,
-          length: 3,
-        }
-      }
-
-      return yAxisConfig
-    })
-
-    // 获取图表容器宽度
-    const DEFAULT_CHART_WIDTH = 800
-    const chartWidth = chartRef.value?.clientWidth || DEFAULT_CHART_WIDTH
-
-    // 为每个子图添加底部边框线
-    const graphicElements = channelValues.flatMap((_, i) => {
-      const bottomY = `${topMarginPct + (i + 1) * perGridPct - 4}%`
-
-      return [
-        {
-          type: 'line',
-          right: RIGHT_MARGIN_PX,
-          top: bottomY,
-          shape: {
-            x1: 0,
-            y1: 0,
-            x2: chartWidth - RIGHT_MARGIN_PX,
-            y2: 0,
-          },
-          style: {
-            stroke: '#aaa',
-            lineWidth: 1,
-          },
-          z: 0,
-        },
-      ]
-    })
-
-    const option: echarts.EChartsOption = {
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: {
-          type: 'cross',
-          link: [{ xAxisIndex: 'all' }],
-          crossStyle: {
-            color: '#999',
-            width: 1,
-            type: 'dashed',
-          },
-          label: {
-            show: false,
-          },
-        },
-        formatter: function (params) {
-          // 根据channelValues中的顺序排序显示
-          const sortedParams = Array.isArray(params)
-            ? params.slice().sort((a, b) => {
-                const seriesA = channelValues.findIndex((s) => s.name === a.seriesName)
-                const seriesB = channelValues.findIndex((s) => s.name === b.seriesName)
-                return seriesA - seriesB
-              })
-            : []
-          if (sortedParams.length === 0) return ''
-          // show x value at top
-          let xValue = Array.isArray(sortedParams[0]?.data)
-            ? sortedParams[0].data[0]
-            : sortedParams[0]?.data
-          if (xAxesType.value === XAxesType.Index) {
-            // 显示为时间戳
-            xValue = timestamps[xValue as number] || 0
-          }
-          return (
-            `${xValue} ms<br/>` +
-            sortedParams
-              .map((item) => {
-                const yValue = Array.isArray(item.data) ? item.data[1] : item.data
-                return `<span style="display:inline-block;margin-right:6px;width:8px;height:8px;border-radius:50%;background:${item.color};"></span>${item.seriesName}: ${yValue}`
-              })
-              .join('<br/>')
-          )
-        },
-      },
-      axisPointer: {
-        link: [{ xAxisIndex: 'all' }],
-      },
-      grid: grids,
-      xAxis: xAxes,
-      yAxis: yAxes,
-      graphic: graphicElements,
-      series: channelValues.map((s, i) => {
-        // 根据通道类型选择不同的渲染方式
-        const isDigital = s.type === 'digital'
-
-        return {
-          name: s.name,
-          type: 'line',
-          step: isDigital ? 'start' : false, // 开关量使用阶梯图
-          showSymbol: false,
-          xAxisIndex: i,
-          yAxisIndex: i,
-          data: s.y.map((y, k) => {
-            if (xAxesType.value === XAxesType.Index) {
-              return [s.times[k], y]
-            }
-            return [timestamps[s.times[k]!], y]
-          }),
-          animation: false,
-          smooth: isDigital ? false : true, // 只给模拟量平滑处理
-          lineStyle: {
-            type: isDigital ? 'solid' : 'solid',
-          },
-        }
-      }),
-      dataZoom: [
-        {
-          type: 'inside',
-          xAxisIndex: axesIndices,
-          start: zoomStartPct,
-          end: zoomEndPct,
-        },
-        {
-          type: 'slider',
-          xAxisIndex: axesIndices,
-          bottom: 0,
-          start: zoomStartPct,
-          end: zoomEndPct,
-        },
-      ],
-    }
-
-    chartInstance.value?.setOption(option, { notMerge: true })
-    lastWindow.start = startTime !== undefined ? startTime : data.window.start
-    lastWindow.end = endTime !== undefined ? endTime : data.window.end
+    renderChart()
+    lastWindow.start = data.window.start
+    lastWindow.end = data.window.end
     datasetStore.error = ''
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -409,22 +416,39 @@ function handleDataZoom(params: unknown) {
   const startPct: number = typeof dz.start === 'number' ? dz.start : 0
   const endPct: number = typeof dz.end === 'number' ? dz.end : 100
   const span = initialWindow.end - initialWindow.start
-  let zoomStart = initialWindow.start + (startPct / 100) * span
-  let zoomEnd = initialWindow.start + (endPct / 100) * span
+  let zoomStart = (startPct / 100) * span
+  let zoomEnd = (endPct / 100) * span
   if (xAxesType.value === XAxesType.Time) {
-    zoomStart = timestamps[0]! + (startPct / 100) * span
-    zoomEnd = timestamps[0]! + (endPct / 100) * span
+    let startFound = false
+    let endFound = false
+    for (let i = 0; i < timestamps.length && (!startFound || !endFound); i++) {
+      if (!startFound && timestamps[i]! >= zoomStart) {
+        zoomStart = i
+        startFound = true
+      }
+      if (!endFound && timestamps[i]! >= zoomEnd) {
+        zoomEnd = i
+        endFound = true
+      }
+    }
   }
 
-  // Only reload if zoomed significantly (more than 10% of range)
-  const threshold = (lastWindow.end - lastWindow.start) * 0.1
-
-  const zoomRange = zoomEnd - zoomStart
-  const offsetRange = Math.max(
-    Math.abs(zoomStart - lastWindow.start),
-    Math.abs(zoomEnd - lastWindow.end),
+  console.log(
+    `DataZoom from ${zoomStart} to ${zoomEnd} (last window: ${lastWindow.start} to ${lastWindow.end})`,
   )
-  if ((zoomRange < threshold && zoomRange > 0) || offsetRange > threshold) {
+
+  // Only reload if zoomed significantly (more than 10% of range)
+  const threshold = 10
+
+  const zoomRange =
+    ((Math.abs(zoomEnd - zoomStart) - Math.abs(lastWindow.end - lastWindow.start)) /
+      Math.abs(lastWindow.end - lastWindow.start)) *
+    100
+  const offsetRange =
+    ((Math.abs(zoomStart - lastWindow.start) + Math.abs(zoomEnd - lastWindow.end)) /
+      Math.abs(lastWindow.end - lastWindow.start)) *
+    100
+  if (zoomRange >= threshold || offsetRange > threshold) {
     // Zoomed in significantly, request detailed data
     refreshData(zoomStart, zoomEnd)
   }

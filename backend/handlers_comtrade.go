@@ -323,12 +323,12 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 		startTimeIndex := 0
 		endTimeIndex := int(math.Max(5000, float64(len(timestamps)/20)))
 		if st := c.Query("startTime"); st != "" {
-			if v, err := strconv.ParseInt(st, 10, 64); err == nil {
+			if v, err := strconv.ParseFloat(st, 32); err == nil {
 				startTimeIndex = int(v)
 			}
 		}
 		if et := c.Query("endTime"); et != "" {
-			if v, err := strconv.ParseInt(et, 10, 64); err == nil {
+			if v, err := strconv.ParseFloat(et, 32); err == nil {
 				endTimeIndex = int(v)
 			}
 		}
