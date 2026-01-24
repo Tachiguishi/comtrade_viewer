@@ -85,7 +85,7 @@ enum XAxesType {
 
 // Track initial data bounds for keeping X-axis consistent
 let initialWindow = { start: 0, end: 0 }
-const lastWindow = { start: 0, end: 0 }
+const lastWindow = { startIndex: 0, endIndex: 0, startTime: 0, endTime: 0 }
 const xAxesType = ref<XAxesType>(XAxesType.Index)
 
 onMounted(() => {
@@ -394,8 +394,10 @@ async function refreshData(startTime?: number, endTime?: number) {
     })
 
     renderChart()
-    lastWindow.start = data.window.start
-    lastWindow.end = data.window.end
+    lastWindow.startIndex = data.window.start
+    lastWindow.endIndex = data.window.end
+    lastWindow.startTime = timestamps[data.window.start] || timestamps[0] || 0
+    lastWindow.endTime = timestamps[data.window.end] || timestamps[timestamps.length - 1] || 0
     datasetStore.error = ''
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -407,51 +409,108 @@ async function refreshData(startTime?: number, endTime?: number) {
 
 // Handle dataZoom events to load detailed data for zoomed region
 function handleDataZoom(params: unknown) {
-  if (!chartInstance.value) return
+  // Guard: check if chart and data are available
+  if (!chartInstance.value || timestamps.length === 0) return
 
   const p = params as echarts.ECElementEvent
-  // Get current zoom range from xAxis
-  const dz =
-    p.batch && Array.isArray(p.batch) && p.batch.length > 0 ? p.batch[0] : { start: 0, end: 100 }
-  const startPct: number = typeof dz.start === 'number' ? dz.start : 0
-  const endPct: number = typeof dz.end === 'number' ? dz.end : 100
+  // Guard: validate batch data exists
+  if (!p.batch || !Array.isArray(p.batch) || p.batch.length === 0) return
+
+  const dz = p.batch[0]
+  // Guard: validate dz has numeric start/end
+  if (typeof dz.start !== 'number' || typeof dz.end !== 'number') return
+
+  const startPct = dz.start
+  const endPct = dz.end
   const span = initialWindow.end - initialWindow.start
-  let zoomStart = (startPct / 100) * span
-  let zoomEnd = (endPct / 100) * span
+
+  // Guard: prevent division by zero
+  if (span === 0) return
+
+  // Convert percentages to absolute values
+  const absStart = (startPct / 100) * span + initialWindow.start
+  const absEnd = (endPct / 100) * span + initialWindow.start
+
+  // Determine zoom ranges in both index and time domains
+  const MIN_POINTS = 500
+  let startIdx: number
+  let endIdx: number
+  let startTimeVal: number
+  let endTimeVal: number
+
   if (xAxesType.value === XAxesType.Time) {
-    let startFound = false
-    let endFound = false
-    for (let i = 0; i < timestamps.length && (!startFound || !endFound); i++) {
-      if (!startFound && timestamps[i]! >= zoomStart) {
-        zoomStart = i
-        startFound = true
-      }
-      if (!endFound && timestamps[i]! >= zoomEnd) {
-        zoomEnd = i
-        endFound = true
-      }
+    // Time mode: absStart/absEnd are time values
+    startIdx = binarySearchIndex(timestamps, absStart)
+    endIdx = binarySearchIndex(timestamps, absEnd)
+
+    // Enforce minimum zoom width by index count
+    if (endIdx - startIdx + 1 < MIN_POINTS) {
+      // Try to extend to the right first
+      endIdx = Math.min(startIdx + MIN_POINTS - 1, timestamps.length - 1)
+      // If near the end, shift start left to maintain width
+      startIdx = Math.max(0, endIdx - (MIN_POINTS - 1))
+    }
+
+    startTimeVal = timestamps[startIdx] || timestamps[0] || 0
+    endTimeVal = timestamps[endIdx] || timestamps[timestamps.length - 1] || 0
+
+    // Thresholds based on time range
+    const lastRangeTime = Math.abs(lastWindow.endTime - lastWindow.startTime)
+    if (lastRangeTime === 0) return
+    const currRangeTime = Math.abs(endTimeVal - startTimeVal)
+    const zoomRangePct = ((currRangeTime - lastRangeTime) / lastRangeTime) * 100
+    const offsetRangePct =
+      ((Math.abs(startTimeVal - lastWindow.startTime) + Math.abs(endTimeVal - lastWindow.endTime)) /
+        lastRangeTime) *
+      100
+
+    const threshold = 10
+    if (zoomRangePct >= threshold || offsetRangePct > threshold) {
+      refreshData(startIdx, endIdx)
+    }
+  } else {
+    // Index mode: absStart/absEnd are index values
+    startIdx = Math.max(0, Math.floor(absStart))
+    endIdx = Math.min(timestamps.length - 1, Math.ceil(absEnd))
+
+    // Enforce minimum zoom width by index count
+    if (endIdx - startIdx + 1 < MIN_POINTS) {
+      endIdx = Math.min(startIdx + MIN_POINTS - 1, timestamps.length - 1)
+      startIdx = Math.max(0, endIdx - (MIN_POINTS - 1))
+    }
+
+    const lastRangeIdx = Math.abs(lastWindow.endIndex - lastWindow.startIndex)
+    if (lastRangeIdx === 0) return
+    const currRangeIdx = Math.abs(endIdx - startIdx)
+    const zoomRangePct = ((currRangeIdx - lastRangeIdx) / lastRangeIdx) * 100
+    const offsetRangePct =
+      ((Math.abs(startIdx - lastWindow.startIndex) + Math.abs(endIdx - lastWindow.endIndex)) /
+        lastRangeIdx) *
+      100
+
+    const threshold = 10
+    if (zoomRangePct >= threshold || offsetRangePct > threshold) {
+      // Always pass time values to backend
+      refreshData(startIdx, endIdx)
+    }
+  }
+}
+
+// Binary search to find the index for a given timestamp value
+function binarySearchIndex(arr: Array<number>, target: number): number {
+  let left = 0
+  let right = arr.length - 1
+
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2)
+    if (arr[mid]! < target) {
+      left = mid + 1
+    } else {
+      right = mid - 1
     }
   }
 
-  console.log(
-    `DataZoom from ${zoomStart} to ${zoomEnd} (last window: ${lastWindow.start} to ${lastWindow.end})`,
-  )
-
-  // Only reload if zoomed significantly (more than 10% of range)
-  const threshold = 10
-
-  const zoomRange =
-    ((Math.abs(zoomEnd - zoomStart) - Math.abs(lastWindow.end - lastWindow.start)) /
-      Math.abs(lastWindow.end - lastWindow.start)) *
-    100
-  const offsetRange =
-    ((Math.abs(zoomStart - lastWindow.start) + Math.abs(zoomEnd - lastWindow.end)) /
-      Math.abs(lastWindow.end - lastWindow.start)) *
-    100
-  if (zoomRange >= threshold || offsetRange > threshold) {
-    // Zoomed in significantly, request detailed data
-    refreshData(zoomStart, zoomEnd)
-  }
+  return Math.min(left, arr.length - 1)
 }
 </script>
 
