@@ -102,7 +102,7 @@ func readComtradeFile(ctx context.Context, stor storage.Storage, prefix string, 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var path string
 	for _, entry := range entries {
 		if strings.HasSuffix(strings.ToLower(entry), strings.ToLower(ext)) {
@@ -342,7 +342,7 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 		// 过滤时间范围
 		var timeIndices []int
 		if (startTimeIndex != 0 || endTimeIndex != 0) && startTimeIndex < endTimeIndex {
-			for i:= range timestamps {
+			for i := range timestamps {
 				if i >= startTimeIndex && i <= endTimeIndex {
 					timeIndices = append(timeIndices, i)
 				}
@@ -370,7 +370,7 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 		series := make([]map[string]any, 0, len(analogChannels)+len(digitalChannels))
 
 		// 模拟量
-		for _, chData := range dat.AnalogChannels {
+		for index, chData := range dat.AnalogChannels {
 			if len(analogChannels) == 0 {
 				break
 			}
@@ -393,8 +393,8 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 			y := make([]float64, sampleLen)
 
 			var multiplier, offset float64 = 1.0, 0.0
-			if chNum-1 < len(meta.AnalogChannels) {
-				ch := meta.AnalogChannels[chNum-1]
+			if index < len(meta.AnalogChannels) {
+				ch := meta.AnalogChannels[index]
 				multiplier = ch.Multiplier
 				offset = ch.Offset
 			}
@@ -423,15 +423,15 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 			series = append(series, map[string]any{
 				"channel": chNum,
 				"type":    "analog",
-				"name":    meta.AnalogChannels[chNum-1].ChannelName,
-				"unit":    meta.AnalogChannels[chNum-1].Unit,
+				"name":    meta.AnalogChannels[index].ChannelName,
+				"unit":    meta.AnalogChannels[index].Unit,
 				"times":   returnTimes,
 				"y":       returnY,
 			})
 		}
 
 		// 开关量
-		for _, chData := range dat.DigitalChannels {
+		for index, chData := range dat.DigitalChannels {
 			if len(digitalChannels) == 0 {
 				break
 			}
@@ -469,7 +469,7 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 			series = append(series, map[string]any{
 				"channel": chNum,
 				"type":    "digital",
-				"name":    meta.DigitalChannels[chNum-1].ChannelName,
+				"name":    meta.DigitalChannels[index].ChannelName,
 				"times":   returnTimes,
 				"y":       returnY,
 			})
@@ -477,13 +477,13 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 
 		response := gin.H{
 			"series": series,
-			"times": timestamps,
+			"times":  timestamps,
 			"window": map[string]int{"start": startTimeIndex, "end": endTimeIndex},
 		}
 
 		response["downsample"] = map[string]any{
-			"method":         downsampleMethod,
-			"targetPoints":   targetPoints,
+			"method":       downsampleMethod,
+			"targetPoints": targetPoints,
 		}
 
 		c.JSON(http.StatusOK, response)
@@ -519,6 +519,16 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 				"AD":        "A",
 			})
 
+			intData, floatData, _ := dat.GetAnalogData(ch.ChannelNumber)
+			dataLen := max(len(intData), len(floatData))
+			rawData := make([]float32, dataLen)
+			if len(intData) > 0 {
+				for i, v := range intData {
+					rawData[i] = float32(v)
+				}
+			} else if len(floatData) > 0 {
+				copy(rawData, floatData)
+			}
 			channels = append(channels, map[string]any{
 				"name":    ch.ChannelName,
 				"uu":      ch.Unit,
@@ -529,7 +539,7 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 				"max":     ch.MaxValue,
 				"min":     ch.MinValue,
 				"analyse": 1,
-				"y":       dat.AnalogChannels[ch.ChannelNumber-1].RawData,
+				"y":       rawData,
 				"skew":    ch.Skew,
 			})
 		}
@@ -539,6 +549,10 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 				"groupName": ch.ChannelName,
 				"AD":        "D",
 			})
+
+			intData, _ := dat.GetDigitalData(ch.ChannelNumber)
+			rawData := make([]int8, len(intData))
+			copy(rawData, intData)
 			channels = append(channels, map[string]any{
 				"name":    ch.ChannelName,
 				"uu":      "",
@@ -549,17 +563,17 @@ func registerComtradeRoutes(r *gin.Engine, stor storage.Storage) {
 				"max":     1,
 				"min":     1,
 				"analyse": 0,
-				"y":       dat.DigitalChannels[ch.ChannelNumber-1].RawData,
+				"y":       rawData,
 				"skew":    0,
 			})
 		}
 
 		response := gin.H{
-			"beginTime":  meta.StartTime,
-			"sampleInfo": sampleInfo,
-			"ts":         dat.Timestamps,
+			"beginTime":   meta.StartTime,
+			"sampleInfo":  sampleInfo,
+			"ts":          dat.Timestamps,
 			"allSelector": selecters,
-			"chns":       channels,
+			"chns":        channels,
 		}
 
 		c.JSON(http.StatusOK, response)

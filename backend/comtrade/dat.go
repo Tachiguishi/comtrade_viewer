@@ -19,7 +19,7 @@ type DigitalChannelData struct {
 }
 
 type ChannelData struct {
-	Timestamps      []int32             `json:"timestamps"`
+	Timestamps      []int32              `json:"timestamps"`
 	AnalogChannels  []AnalogChannelData  `json:"analogChannels"`
 	DigitalChannels []DigitalChannelData `json:"digitalChannels"`
 }
@@ -75,6 +75,24 @@ func (dat *ChannelData) AddDigitalData(channelNumber int, value int8) {
 	})
 }
 
+func (dat *ChannelData) GetAnalogData(channelNumber int) ([]int32, []float32, error) {
+	for i := range dat.AnalogChannels {
+		if dat.AnalogChannels[i].ChannelNumber == channelNumber {
+			return dat.AnalogChannels[i].RawData, dat.AnalogChannels[i].RawDataFloat, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("analog channel %d not found", channelNumber)
+}
+
+func (dat *ChannelData) GetDigitalData(channelNumber int) ([]int8, error) {
+	for i := range dat.DigitalChannels {
+		if dat.DigitalChannels[i].ChannelNumber == channelNumber {
+			return dat.DigitalChannels[i].RawData, nil
+		}
+	}
+	return nil, fmt.Errorf("digital channel %d not found", channelNumber)
+}
+
 func parseDATFile(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 	switch cfg.DataFileType {
 	case "ascii":
@@ -126,20 +144,28 @@ func parseDATFileASCII(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 
 		// 解析模拟通道值(支持整数和浮点数)
 		for i := range na {
+			if i >= len(cfg.AnalogChannels) {
+				return nil, fmt.Errorf("line %d: analog channel index %d out of range %d in config", lineNum, i, len(cfg.AnalogChannels))
+			}
+			chNum := cfg.AnalogChannels[i].ChannelNumber
 			var val float64
 			if _, err := fmt.Sscanf(parts[2+i], "%f", &val); err != nil {
-				return nil, fmt.Errorf("line %d: parse analog ch %d: %w", lineNum, i+1, err)
+				return nil, fmt.Errorf("line %d: parse analog ch %d: %w", lineNum, chNum, err)
 			}
-			dat.AddAnalogDataFloat(i+1, float32(val))
+			dat.AddAnalogDataFloat(chNum, float32(val))
 		}
 
 		// 解析数字通道值
 		for i := range nd {
+			if i >= len(cfg.DigitalChannels) {
+				return nil, fmt.Errorf("line %d: digital channel index %d out of range %d in config", lineNum, i, len(cfg.DigitalChannels))
+			}
+			chNum := cfg.DigitalChannels[i].ChannelNumber
 			var val int
 			if _, err := fmt.Sscanf(parts[2+na+i], "%d", &val); err != nil {
-				return nil, fmt.Errorf("line %d: parse digital ch %d: %w", lineNum, i+1, err)
+				return nil, fmt.Errorf("line %d: parse digital ch %d: %w", lineNum, chNum, err)
 			}
-			dat.AddDigitalData(i+1, int8(val))
+			dat.AddDigitalData(chNum, int8(val))
 		}
 	}
 
@@ -211,6 +237,12 @@ func parseDATFileBinary(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 
 		// 模拟量 NA × int16
 		for i := range na {
+			// query channelNumber from cfg.AnalogChannels[i].ChannelNumber
+			if i >= len(cfg.AnalogChannels) {
+				return nil, fmt.Errorf("analog channel index %d out of range %d in config", i, len(cfg.AnalogChannels))
+			}
+
+			chNum := cfg.AnalogChannels[i].ChannelNumber
 			switch cfg.DataFileType {
 			case "binary":
 				var raw int16
@@ -218,27 +250,27 @@ func parseDATFileBinary(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 					if err == io.EOF || err == io.ErrUnexpectedEOF {
 						return dat, nil
 					}
-					return nil, fmt.Errorf("read analog ch %d: %w", i+1, err)
+					return nil, fmt.Errorf("read analog ch %d: %w", chNum, err)
 				}
-				dat.AddAnalogData(i+1, int32(raw))
+				dat.AddAnalogData(chNum, int32(raw))
 			case "binary32":
 				var raw int32
 				if err := binary.Read(r, binary.LittleEndian, &raw); err != nil {
 					if err == io.EOF || err == io.ErrUnexpectedEOF {
 						return dat, nil
 					}
-					return nil, fmt.Errorf("read analog ch %d: %w", i+1, err)
+					return nil, fmt.Errorf("read analog ch %d: %w", chNum, err)
 				}
-				dat.AddAnalogData(i+1, raw)
+				dat.AddAnalogData(chNum, raw)
 			case "float32":
 				var raw float32
 				if err := binary.Read(r, binary.LittleEndian, &raw); err != nil {
 					if err == io.EOF || err == io.ErrUnexpectedEOF {
 						return dat, nil
 					}
-					return nil, fmt.Errorf("read analog ch %d: %w", i+1, err)
+					return nil, fmt.Errorf("read analog ch %d: %w", chNum, err)
 				}
-				dat.AddAnalogDataFloat(i+1, raw)
+				dat.AddAnalogDataFloat(chNum, raw)
 			default:
 				return nil, fmt.Errorf("unsupported analog data type: %s", cfg.DataFileType)
 			}
@@ -257,13 +289,17 @@ func parseDATFileBinary(f io.Reader, cfg *Metadata) (*ChannelData, error) {
 			}
 			// 解包 ND 个数字量位
 			for d := range nd {
+				if d >= len(cfg.DigitalChannels) {
+					return nil, fmt.Errorf("digital channel index %d out of range %d in config", d, len(cfg.DigitalChannels))
+				}
+				channelNumber := cfg.DigitalChannels[d].ChannelNumber
 				w := d / 16
 				b := uint(d % 16)
 				val := 0
 				if ((packed[w] >> b) & 1) == 1 {
 					val = 1
 				}
-				dat.AddDigitalData(d+1, int8(val))
+				dat.AddDigitalData(channelNumber, int8(val))
 			}
 		}
 	}
