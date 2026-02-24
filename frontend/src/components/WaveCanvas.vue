@@ -497,6 +497,36 @@ function init(): void {
   state.rulerContext = rulerCanvas.value.getContext('2d')
 }
 
+/**
+ * 同步画布尺寸到可见容器尺寸
+ */
+function syncCanvasLayout(): void {
+  if (!waveCanvas.value || !rulerCanvas.value || !waveCanvasContainer.value) {
+    return
+  }
+
+  const parentElement = waveCanvasContainer.value.parentElement
+  const grandParentElement = parentElement?.parentElement
+  const targetElement = grandParentElement || parentElement
+
+  const width = targetElement?.clientWidth || 0
+  const height = targetElement?.clientHeight || 0
+
+  if (width === 0 || height === 0) {
+    return
+  }
+
+  state.canvasW = width
+  state.rulerH = height
+
+  waveCanvas.value.width = state.canvasW
+  rulerCanvas.value.width = state.canvasW
+  rulerCanvas.value.height = state.rulerH
+
+  waveCanvasContainer.value.style.width = `${state.canvasW}px`
+  waveCanvasContainer.value.style.height = `${state.rulerH - state.ymargin}px`
+}
+
 // ==================== 事件监听设置 ====================
 
 /**
@@ -618,7 +648,8 @@ const loadWaveData = (result: WaveDataType): void => {
   let totalHeight = state.gap
 
   // 计算总高度
-  for (let j = 0; j < channels.length; j++) {
+  const maxChannelsToShow = Math.min(channels.length, 100) // 最多显示100个通道，避免过高
+  for (let j = 0; j < maxChannelsToShow; j++) {
     totalHeight = state.gap * (j + 2)
   }
 
@@ -649,13 +680,18 @@ const loadWaveData = (result: WaveDataType): void => {
 
   state.beginTime = result.beginTime.slice(0, result.beginTime.length - 3)
 
-  // 计算初始可视区域
-  const initialRange = calculateVisibleChannels()
-  visibleChannelRange.start = initialRange.start
-  visibleChannelRange.end = initialRange.end
+  // 等待 v-show 触发布局后再同步尺寸并绘制
+  void nextTick(() => {
+    syncCanvasLayout()
 
-  renderWaveform(result)
-  renderRuler(result)
+    // 计算初始可视区域
+    const initialRange = calculateVisibleChannels()
+    visibleChannelRange.start = initialRange.start
+    visibleChannelRange.end = initialRange.end
+
+    renderWaveform(result)
+    renderRuler(result)
+  })
 }
 
 /**
@@ -763,6 +799,12 @@ function drawNewWaveOnly(result: WaveDataType, context: CanvasRenderingContext2D
   const channels = result.chns
 
   // 只绘制可视区域内的通道
+  console.log(
+    'Drawing channels from index',
+    visibleChannelRange.start,
+    'to',
+    visibleChannelRange.end - 1,
+  )
   for (let i = visibleChannelRange.start; i < visibleChannelRange.end; i++) {
     const channel = channels[i]
     if (!channel) continue
@@ -778,6 +820,7 @@ function drawNewWaveOnly(result: WaveDataType, context: CanvasRenderingContext2D
 
     // 只绘制可视区域内的通道
     if (isVisible) {
+      console.log('Drawing channel index:', i, 'Name:', channel.name)
       visiableChannels.push(i)
 
       // 绘制通道基准线

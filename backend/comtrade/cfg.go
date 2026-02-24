@@ -4,10 +4,14 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
+
+var frequencyPrefixPattern = regexp.MustCompile(`^[\s]*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)`)
 
 type Metadata struct {
 	Station           string           `json:"station"`
@@ -105,13 +109,33 @@ func parseStationLine(parser *cfgParser, line string) error {
 	if len(parts) < 2 {
 		return fmt.Errorf("invalid STATION line: %s", line)
 	}
-	parser.cfg.Station = parts[0]
-	parser.cfg.Relay = parts[1]
-	if len(parts) > 2 {
-		parser.cfg.Version = parts[2]
+
+	for i := range parts {
+		parts[i] = sanitizeStationField(parts[i])
+	}
+
+	if len(parts) >= 3 {
+		versionCandidate := parts[len(parts)-1]
+		relayCandidate := parts[len(parts)-2]
+		if isSupportedComtradeVersion(versionCandidate) {
+			parser.cfg.Station = strings.Join(parts[:len(parts)-2], ",")
+			parser.cfg.Relay = relayCandidate
+			parser.cfg.Version = versionCandidate
+		} else {
+			parser.cfg.Station = strings.Join(parts[:len(parts)-1], ",")
+			parser.cfg.Relay = parts[len(parts)-1]
+			parser.cfg.Version = "1991" // no version specified, assume 1991
+		}
 	} else {
+		parser.cfg.Station = parts[0]
+		parser.cfg.Relay = parts[1]
 		parser.cfg.Version = "1991" // no version specified, assume 1991
 	}
+
+	if parser.cfg.Relay == "" {
+		return fmt.Errorf("invalid STATION line: missing relay id: %s", line)
+	}
+
 	switch parser.cfg.Version {
 	case "1991", "1999", "2013":
 		parser.status = 1
@@ -131,6 +155,25 @@ func parseStationLine(parser *cfgParser, line string) error {
 		return fmt.Errorf("unsupported COMTRADE version: %s", parser.cfg.Version)
 	}
 	return nil
+}
+
+func sanitizeStationField(field string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, field)
+	return strings.TrimSpace(cleaned)
+}
+
+func isSupportedComtradeVersion(version string) bool {
+	switch version {
+	case "1991", "1999", "2013":
+		return true
+	default:
+		return false
+	}
 }
 
 /*
@@ -295,13 +338,25 @@ func parseFrequencyLine(parser *cfgParser, line string) error {
 	if len(parts) < 1 {
 		return fmt.Errorf("invalid FREQUENCY line: %s", line)
 	}
-	freqFloat, err := strconv.ParseFloat(parts[0], 64)
+	freqText := extractLeadingFloat(parts[0])
+	if freqText == "" {
+		return fmt.Errorf("invalid Frequency: %s", parts[0])
+	}
+	freqFloat, err := strconv.ParseFloat(freqText, 64)
 	if err != nil {
 		return fmt.Errorf("invalid Frequency: %s", parts[0])
 	}
 	parser.cfg.Frequency = freqFloat
 	parser.status++
 	return nil
+}
+
+func extractLeadingFloat(value string) string {
+	matches := frequencyPrefixPattern.FindStringSubmatch(value)
+	if len(matches) < 2 {
+		return ""
+	}
+	return matches[1]
 }
 
 /*

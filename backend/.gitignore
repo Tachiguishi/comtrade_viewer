@@ -2,3 +2,4 @@ comtradeviewer
 data/
 coverage.html
 config.yaml
+*.out
