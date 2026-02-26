@@ -77,6 +77,8 @@ const sampleCount = ref(0)
 let channelValues = reactive<Array<ChannelValue>>([])
 let timestamps = reactive<Array<number>>([])
 let xWindow = reactive<{ start: number; end: number }>({ start: 0, end: 0 })
+const cursorSampleIndex = ref<number | null>(null)
+const CURSOR_LOG_PREFIX = '[WaveformCursor]'
 
 enum XAxesType {
   Time = 'time',
@@ -92,6 +94,8 @@ onMounted(() => {
   if (chartRef.value) {
     chartInstance.value = echarts.init(chartRef.value)
     chartInstance.value.on('dataZoom', handleDataZoom)
+    chartInstance.value.getZr().on('click', handleChartClick)
+    console.log(`${CURSOR_LOG_PREFIX} zr click listener attached`)
     window.addEventListener('resize', resizeChart)
 
     refreshData()
@@ -100,6 +104,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', resizeChart)
+  chartInstance.value?.getZr().off('click', handleChartClick)
   chartInstance.value?.dispose()
 })
 
@@ -169,6 +174,152 @@ function computeCycleRms(channel: ChannelValue, sampleIndex: number): string {
   return Number.isFinite(rms) ? rms.toFixed(3) : '-'
 }
 
+function formatRelativeMs(delta: number): string {
+  const normalized = Math.abs(delta) < 1e-9 ? 0 : delta
+  const sign = normalized > 0 ? '+' : ''
+  return `${sign}${normalized.toFixed(3)}`
+}
+
+function getCursorAxisValue(): number | null {
+  if (cursorSampleIndex.value === null || timestamps.length === 0) {
+    console.log(`${CURSOR_LOG_PREFIX} getCursorAxisValue skipped`, {
+      cursorSampleIndex: cursorSampleIndex.value,
+      timestampsLength: timestamps.length,
+    })
+    return null
+  }
+  const idx = Math.max(0, Math.min(cursorSampleIndex.value, timestamps.length - 1))
+  const axisValue = xAxesType.value === XAxesType.Index ? idx : (timestamps[idx] ?? null)
+  console.log(`${CURSOR_LOG_PREFIX} getCursorAxisValue`, {
+    xAxesType: xAxesType.value,
+    cursorSampleIndex: cursorSampleIndex.value,
+    normalizedIndex: idx,
+    axisValue,
+  })
+  return axisValue
+}
+
+function getPointFromClickEvent(evt: unknown): [number, number] | null {
+  const e = evt as {
+    offsetX?: number
+    offsetY?: number
+    zrX?: number
+    zrY?: number
+    event?: { offsetX?: number; offsetY?: number; zrX?: number; zrY?: number }
+  }
+
+  const x = e.offsetX ?? e.zrX ?? e.event?.offsetX ?? e.event?.zrX
+  const y = e.offsetY ?? e.zrY ?? e.event?.offsetY ?? e.event?.zrY
+
+  console.log(`${CURSOR_LOG_PREFIX} raw click event`, evt)
+  console.log(`${CURSOR_LOG_PREFIX} extracted click point`, { x, y })
+
+  if (typeof x !== 'number' || typeof y !== 'number') {
+    console.log(`${CURSOR_LOG_PREFIX} invalid click point type`)
+    return null
+  }
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    console.log(`${CURSOR_LOG_PREFIX} click point is not finite`)
+    return null
+  }
+  return [x, y]
+}
+
+function getGridIndexByPoint(point: [number, number]): number {
+  if (!chartInstance.value) {
+    console.log(`${CURSOR_LOG_PREFIX} getGridIndexByPoint skipped: chartInstance empty`)
+    return -1
+  }
+  for (let i = 0; i < channelValues.length; i++) {
+    const hit = chartInstance.value.containPixel({ gridIndex: i }, point)
+    console.log(`${CURSOR_LOG_PREFIX} grid hit test`, { gridIndex: i, point, hit })
+    if (hit) return i
+  }
+  console.log(`${CURSOR_LOG_PREFIX} no grid matched point`, { point })
+  return -1
+}
+
+function handleChartClick(evt: unknown) {
+  console.log(`${CURSOR_LOG_PREFIX} handleChartClick triggered`, {
+    hasChart: !!chartInstance.value,
+    timestampsLength: timestamps.length,
+    channelCount: channelValues.length,
+  })
+  if (!chartInstance.value || timestamps.length === 0 || channelValues.length === 0) {
+    console.log(`${CURSOR_LOG_PREFIX} handleChartClick early return by guard`)
+    return
+  }
+
+  const point = getPointFromClickEvent(evt)
+  if (!point) {
+    console.log(`${CURSOR_LOG_PREFIX} handleChartClick failed to parse point`)
+    return
+  }
+
+  const gridIndex = getGridIndexByPoint(point)
+  if (gridIndex < 0) {
+    console.log(`${CURSOR_LOG_PREFIX} click outside all grids`, { point })
+    return
+  }
+
+  const axisValueRawByAxis = chartInstance.value.convertFromPixel({ xAxisIndex: gridIndex }, point)
+  const axisValueByAxis = Array.isArray(axisValueRawByAxis)
+    ? axisValueRawByAxis[0]
+    : axisValueRawByAxis
+
+  const axisValueRawBySeries = chartInstance.value.convertFromPixel(
+    { seriesIndex: gridIndex },
+    point,
+  )
+  const axisValueBySeries = Array.isArray(axisValueRawBySeries)
+    ? axisValueRawBySeries[0]
+    : axisValueRawBySeries
+
+  const axisValueRawByGrid = chartInstance.value.convertFromPixel({ gridIndex }, point)
+  const axisValueByGrid = Array.isArray(axisValueRawByGrid)
+    ? axisValueRawByGrid[0]
+    : axisValueRawByGrid
+
+  const axisValue =
+    typeof axisValueByAxis === 'number' && !Number.isNaN(axisValueByAxis)
+      ? axisValueByAxis
+      : typeof axisValueBySeries === 'number' && !Number.isNaN(axisValueBySeries)
+        ? axisValueBySeries
+        : axisValueByGrid
+  console.log(`${CURSOR_LOG_PREFIX} pixel->axis result`, {
+    gridIndex,
+    point,
+    axisValueRawByAxis,
+    axisValueRawBySeries,
+    axisValueRawByGrid,
+    axisValue,
+    xAxesType: xAxesType.value,
+  })
+  if (typeof axisValue !== 'number' || Number.isNaN(axisValue)) {
+    console.log(`${CURSOR_LOG_PREFIX} invalid axis value`, { axisValue })
+    return
+  }
+
+  const nextIndex =
+    xAxesType.value === XAxesType.Index
+      ? Math.round(axisValue)
+      : binarySearchIndex(timestamps, axisValue)
+
+  console.log(`${CURSOR_LOG_PREFIX} computed nextIndex`, {
+    axisValue,
+    nextIndex,
+    firstTimestamp: timestamps[0],
+    lastTimestamp: timestamps[timestamps.length - 1],
+  })
+
+  cursorSampleIndex.value = Math.max(0, Math.min(nextIndex, timestamps.length - 1))
+  console.log(`${CURSOR_LOG_PREFIX} cursor updated`, {
+    cursorSampleIndex: cursorSampleIndex.value,
+    cursorTime: timestamps[cursorSampleIndex.value] ?? null,
+  })
+  renderChart()
+}
+
 // startTime
 const startTime = computed(() => {
   if (datasetStore.metadata?.startTime) {
@@ -195,6 +346,7 @@ watch(
   () => {
     // Reset initial window when dataset metadata changes
     initialWindow = { start: 0, end: 0 }
+    cursorSampleIndex.value = null
     refreshData()
   },
 )
@@ -209,6 +361,12 @@ watch(
 )
 
 function renderChart() {
+  console.log(`${CURSOR_LOG_PREFIX} renderChart`, {
+    xAxesType: xAxesType.value,
+    cursorSampleIndex: cursorSampleIndex.value,
+    timestampsLength: timestamps.length,
+    channelCount: channelValues.length,
+  })
   // Store initial window on first load
   if (initialWindow.start === 0 && initialWindow.end === 0) {
     if (xAxesType.value === XAxesType.Index)
@@ -251,6 +409,7 @@ function renderChart() {
   }))
 
   const xAxes = channelValues.map((_, i) => ({
+    type: 'value' as const,
     min: initialWindow.start,
     max: initialWindow.end,
     gridIndex: i,
@@ -367,14 +526,25 @@ function renderChart() {
           ? sortedParams[0].data[0]
           : sortedParams[0]?.data
         let hoverIndex = typeof xValue === 'number' ? xValue : 0
+        let hoverTime = 0
         if (xAxesType.value === XAxesType.Index) {
           // 显示为时间戳
-          xValue = timestamps[xValue as number] || 0
+          hoverIndex = Math.max(0, Math.min(Number(xValue) || 0, timestamps.length - 1))
+          hoverTime = timestamps[hoverIndex] || 0
+          xValue = hoverTime
         } else {
-          hoverIndex = binarySearchIndex(timestamps, Number(xValue) || 0)
+          hoverTime = Number(xValue) || 0
+          hoverIndex = binarySearchIndex(timestamps, hoverTime)
         }
+        const cursorTime =
+          cursorSampleIndex.value === null
+            ? null
+            : (timestamps[Math.max(0, Math.min(cursorSampleIndex.value, timestamps.length - 1))] ??
+              null)
+        const relativeInfo =
+          cursorTime === null ? '' : ` (相对游标: ${formatRelativeMs(hoverTime - cursorTime)} ms)`
         return (
-          `${xValue} ms<br/>` +
+          `${xValue} ms${relativeInfo}<br/>` +
           sortedParams
             .map((item) => {
               const seriesName = typeof item.seriesName === 'string' ? item.seriesName : ''
@@ -405,6 +575,7 @@ function renderChart() {
     series: channelValues.map((s, i) => {
       // 根据通道类型选择不同的渲染方式
       const isDigital = s.type === 'digital'
+      const cursorAxisValue = getCursorAxisValue()
 
       return {
         name: s.name,
@@ -424,6 +595,21 @@ function renderChart() {
         lineStyle: {
           type: isDigital ? 'solid' : 'solid',
         },
+        markLine:
+          cursorAxisValue === null
+            ? undefined
+            : {
+                symbol: ['none', 'none'],
+                silent: true,
+                animation: false,
+                lineStyle: {
+                  color: '#999',
+                  width: 1,
+                  type: 'solid',
+                },
+                label: { show: false },
+                data: [{ xAxis: cursorAxisValue }],
+              },
       }
     }),
     dataZoom: [
@@ -471,6 +657,15 @@ async function refreshData(startTime?: number, endTime?: number) {
 
     timestamps = data.times
     xWindow = data.window
+
+    if (timestamps.length > 0 && cursorSampleIndex.value === null) {
+      cursorSampleIndex.value = Math.max(0, Math.min(data.window.start, timestamps.length - 1))
+      console.log(`${CURSOR_LOG_PREFIX} init cursor on refreshData`, {
+        cursorSampleIndex: cursorSampleIndex.value,
+        cursorTime: timestamps[cursorSampleIndex.value] ?? null,
+        window: data.window,
+      })
+    }
 
     // 规范化数字通道数据：确保值只有0和1
     channelValues = data.series.map((s) => {
