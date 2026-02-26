@@ -89,6 +89,10 @@ enum XAxesType {
 let initialWindow = { start: 0, end: 0 }
 const lastWindow = { startIndex: 0, endIndex: 0, startTime: 0, endTime: 0 }
 const xAxesType = ref<XAxesType>(XAxesType.Index)
+const LEFT_MARGIN_PX = 50
+const RIGHT_MARGIN_PX = 30
+const TOP_MARGIN_PCT = 4
+const PLOT_AREA_PCT = 95
 
 onMounted(() => {
   if (chartRef.value) {
@@ -225,18 +229,21 @@ function getPointFromClickEvent(evt: unknown): [number, number] | null {
   return [x, y]
 }
 
-function getGridIndexByPoint(point: [number, number]): number {
-  if (!chartInstance.value) {
-    console.log(`${CURSOR_LOG_PREFIX} getGridIndexByPoint skipped: chartInstance empty`)
-    return -1
+function getCurrentAxisWindow(): { start: number; end: number } | null {
+  if (timestamps.length === 0) return null
+
+  if (xAxesType.value === XAxesType.Index) {
+    const start = Number.isFinite(xWindow.start) ? xWindow.start : initialWindow.start
+    const end = Number.isFinite(xWindow.end) ? xWindow.end : initialWindow.end
+    return { start, end }
   }
-  for (let i = 0; i < channelValues.length; i++) {
-    const hit = chartInstance.value.containPixel({ gridIndex: i }, point)
-    console.log(`${CURSOR_LOG_PREFIX} grid hit test`, { gridIndex: i, point, hit })
-    if (hit) return i
+
+  const startIdx = Math.max(0, Math.min(xWindow.start, timestamps.length - 1))
+  const endIdx = Math.max(0, Math.min(xWindow.end, timestamps.length - 1))
+  return {
+    start: timestamps[startIdx] ?? timestamps[0] ?? 0,
+    end: timestamps[endIdx] ?? timestamps[timestamps.length - 1] ?? 0,
   }
-  console.log(`${CURSOR_LOG_PREFIX} no grid matched point`, { point })
-  return -1
 }
 
 function handleChartClick(evt: unknown) {
@@ -256,49 +263,52 @@ function handleChartClick(evt: unknown) {
     return
   }
 
-  const gridIndex = getGridIndexByPoint(point)
-  if (gridIndex < 0) {
-    console.log(`${CURSOR_LOG_PREFIX} click outside all grids`, { point })
+  const chartWidth = chartRef.value?.clientWidth || 0
+  const chartHeight = chartRef.value?.clientHeight || 0
+  const xStartPx = LEFT_MARGIN_PX
+  const xEndPx = chartWidth - RIGHT_MARGIN_PX
+  const yStartPx = (TOP_MARGIN_PCT / 100) * chartHeight
+  const yEndPx = ((TOP_MARGIN_PCT + PLOT_AREA_PCT - 4) / 100) * chartHeight
+
+  if (chartWidth <= 0 || chartHeight <= 0 || xEndPx <= xStartPx) {
+    console.log(`${CURSOR_LOG_PREFIX} invalid chart size for click mapping`, {
+      chartWidth,
+      chartHeight,
+      xStartPx,
+      xEndPx,
+    })
     return
   }
 
-  const axisValueRawByAxis = chartInstance.value.convertFromPixel({ xAxisIndex: gridIndex }, point)
-  const axisValueByAxis = Array.isArray(axisValueRawByAxis)
-    ? axisValueRawByAxis[0]
-    : axisValueRawByAxis
+  if (point[0] < xStartPx || point[0] > xEndPx || point[1] < yStartPx || point[1] > yEndPx) {
+    console.log(`${CURSOR_LOG_PREFIX} click outside plotting area`, {
+      point,
+      xStartPx,
+      xEndPx,
+      yStartPx,
+      yEndPx,
+    })
+    return
+  }
 
-  const axisValueRawBySeries = chartInstance.value.convertFromPixel(
-    { seriesIndex: gridIndex },
-    point,
-  )
-  const axisValueBySeries = Array.isArray(axisValueRawBySeries)
-    ? axisValueRawBySeries[0]
-    : axisValueRawBySeries
+  const windowRange = getCurrentAxisWindow()
+  if (!windowRange) {
+    console.log(`${CURSOR_LOG_PREFIX} current axis window unavailable`)
+    return
+  }
 
-  const axisValueRawByGrid = chartInstance.value.convertFromPixel({ gridIndex }, point)
-  const axisValueByGrid = Array.isArray(axisValueRawByGrid)
-    ? axisValueRawByGrid[0]
-    : axisValueRawByGrid
+  const ratio = (point[0] - xStartPx) / (xEndPx - xStartPx)
+  const clampedRatio = Math.max(0, Math.min(1, ratio))
+  const axisValue = windowRange.start + clampedRatio * (windowRange.end - windowRange.start)
 
-  const axisValue =
-    typeof axisValueByAxis === 'number' && !Number.isNaN(axisValueByAxis)
-      ? axisValueByAxis
-      : typeof axisValueBySeries === 'number' && !Number.isNaN(axisValueBySeries)
-        ? axisValueBySeries
-        : axisValueByGrid
   console.log(`${CURSOR_LOG_PREFIX} pixel->axis result`, {
-    gridIndex,
     point,
-    axisValueRawByAxis,
-    axisValueRawBySeries,
-    axisValueRawByGrid,
+    ratio,
+    clampedRatio,
     axisValue,
+    windowRange,
     xAxesType: xAxesType.value,
   })
-  if (typeof axisValue !== 'number' || Number.isNaN(axisValue)) {
-    console.log(`${CURSOR_LOG_PREFIX} invalid axis value`, { axisValue })
-    return
-  }
 
   const nextIndex =
     xAxesType.value === XAxesType.Index
@@ -398,8 +408,6 @@ function renderChart() {
   const plotAreaPct = 95 // 95% 高度作为绘图区
   const topMarginPct = 4
   const perGridPct = plotAreaPct / Math.max(seriesCount, 1)
-  const LEFT_MARGIN_PX = 50
-  const RIGHT_MARGIN_PX = 30
 
   const grids = channelValues.map((_, i) => ({
     left: LEFT_MARGIN_PX,
@@ -467,33 +475,52 @@ function renderChart() {
     return yAxisConfig
   })
 
-  // 获取图表容器宽度
-  const DEFAULT_CHART_WIDTH = 800
-  const chartWidth = chartRef.value?.clientWidth || DEFAULT_CHART_WIDTH
+  // 绘制游标线（graphic使用像素坐标，不是坐标轴数据值）
+  const cursorAxisValue = getCursorAxisValue()
+  const graphicElements = []
+  if (typeof cursorAxisValue === 'number') {
+    const windowRange = getCurrentAxisWindow()
+    const chartHeight = chartRef.value?.clientHeight || 0
+    const chartWidth = chartRef.value?.clientWidth || 0
+    const xStartPx = LEFT_MARGIN_PX
+    const xEndPx = chartWidth - RIGHT_MARGIN_PX
+    const xSpan = (windowRange?.end ?? 0) - (windowRange?.start ?? 0)
+    const ratio = xSpan === 0 ? 0 : (cursorAxisValue - (windowRange?.start ?? 0)) / xSpan
+    const clampedRatio = Math.max(0, Math.min(1, ratio))
+    const cursorPixelX = xStartPx + clampedRatio * (xEndPx - xStartPx)
 
-  // 为每个子图添加底部边框线
-  const graphicElements = channelValues.flatMap((_, i) => {
-    const bottomY = `${topMarginPct + (i + 1) * perGridPct - 4}%`
+    const cursorTopY = (topMarginPct / 100) * chartHeight
+    const cursorBottomY = ((topMarginPct + plotAreaPct - 4) / 100) * chartHeight
 
-    return [
-      {
-        type: 'line',
-        right: RIGHT_MARGIN_PX,
-        top: bottomY,
-        shape: {
-          x1: 0,
-          y1: 0,
-          x2: chartWidth - RIGHT_MARGIN_PX,
-          y2: 0,
-        },
-        style: {
-          stroke: '#aaa',
-          lineWidth: 1,
-        },
-        z: 0,
+    console.log(`${CURSOR_LOG_PREFIX} adding cursor line at axis value`, {
+      cursorAxisValue,
+      cursorPixelX,
+      windowRange,
+      ratio,
+      clampedRatio,
+      cursorTopY,
+      cursorBottomY,
+      chartWidth,
+      chartHeight,
+      initialWindow,
+    })
+
+    graphicElements.push({
+      type: 'line',
+      shape: {
+        x1: cursorPixelX,
+        y1: cursorTopY,
+        x2: cursorPixelX,
+        y2: cursorBottomY,
       },
-    ]
-  })
+      style: {
+        stroke: 'red', // #0A3D91, #0B5FFF, #1E3A8A
+        lineWidth: 1.5,
+        lineDash: [4, 4],
+      },
+      z: 10,
+    })
+  }
 
   const option: echarts.EChartsOption = {
     tooltip: {
@@ -575,7 +602,6 @@ function renderChart() {
     series: channelValues.map((s, i) => {
       // 根据通道类型选择不同的渲染方式
       const isDigital = s.type === 'digital'
-      const cursorAxisValue = getCursorAxisValue()
 
       return {
         name: s.name,
@@ -595,21 +621,6 @@ function renderChart() {
         lineStyle: {
           type: isDigital ? 'solid' : 'solid',
         },
-        markLine:
-          cursorAxisValue === null
-            ? undefined
-            : {
-                symbol: ['none', 'none'],
-                silent: true,
-                animation: false,
-                lineStyle: {
-                  color: '#999',
-                  width: 1,
-                  type: 'solid',
-                },
-                label: { show: false },
-                data: [{ xAxis: cursorAxisValue }],
-              },
       }
     }),
     dataZoom: [
