@@ -107,6 +107,68 @@ function resizeChart() {
   chartInstance.value?.resize()
 }
 
+function findNearestIndex(arr: number[], target: number): number {
+  if (arr.length === 0) return -1
+  let left = 0
+  let right = arr.length - 1
+
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2)
+    if (arr[mid] === target) return mid
+    if (arr[mid]! < target) left = mid + 1
+    else right = mid - 1
+  }
+
+  if (left <= 0) return 0
+  if (left >= arr.length) return arr.length - 1
+  return Math.abs(arr[left]! - target) < Math.abs(arr[left - 1]! - target) ? left : left - 1
+}
+
+function getSamplesPerCycle(sampleIndex: number): number {
+  const frequency = datasetStore.metadata?.frequency || 0
+  const sampleRates = datasetStore.metadata?.sampleRates || []
+  if (frequency <= 0 || sampleRates.length === 0) return 0
+
+  let selectedRate = sampleRates[sampleRates.length - 1]?.sampRate || 0
+  for (const rate of sampleRates) {
+    if (sampleIndex <= rate.lastSampleNum) {
+      selectedRate = rate.sampRate
+      break
+    }
+  }
+
+  if (selectedRate <= 0) return 0
+  return Math.max(1, Math.round(selectedRate / frequency))
+}
+
+function computeCycleRms(channel: ChannelValue, sampleIndex: number): string {
+  if (channel.type !== 'analog' || channel.y.length === 0 || channel.times.length === 0) return '-'
+
+  const samplesPerCycle = getSamplesPerCycle(sampleIndex)
+  if (samplesPerCycle <= 0) return '-'
+
+  const centerPos = findNearestIndex(channel.times, sampleIndex)
+  if (centerPos < 0) return '-'
+
+  const halfCycle = Math.floor(samplesPerCycle / 2)
+  const rawStart = Math.max(0, centerPos - halfCycle)
+  const end = Math.min(channel.y.length - 1, rawStart + samplesPerCycle - 1)
+  const start = Math.max(0, end - samplesPerCycle + 1)
+
+  let sumSquares = 0
+  let count = 0
+  for (let i = start; i <= end; i++) {
+    const value = channel.y[i]
+    if (typeof value !== 'number' || Number.isNaN(value)) continue
+    sumSquares += value * value
+    count++
+  }
+
+  if (count === 0) return '-'
+  const rms = Math.sqrt(sumSquares / count)
+  return Number.isFinite(rms) ? rms.toFixed(3) : '-'
+}
+
 // startTime
 const startTime = computed(() => {
   if (datasetStore.metadata?.startTime) {
@@ -289,6 +351,7 @@ function renderChart() {
           show: false,
         },
       },
+      // 鼠标悬停时显示所有通道的瞬时值和RMS，且按照channelValues中的顺序显示
       formatter: function (params) {
         // 根据channelValues中的顺序排序显示
         const sortedParams = Array.isArray(params)
@@ -303,16 +366,30 @@ function renderChart() {
         let xValue = Array.isArray(sortedParams[0]?.data)
           ? sortedParams[0].data[0]
           : sortedParams[0]?.data
+        let hoverIndex = typeof xValue === 'number' ? xValue : 0
         if (xAxesType.value === XAxesType.Index) {
           // 显示为时间戳
           xValue = timestamps[xValue as number] || 0
+        } else {
+          hoverIndex = binarySearchIndex(timestamps, Number(xValue) || 0)
         }
         return (
           `${xValue} ms<br/>` +
           sortedParams
             .map((item) => {
+              const seriesName = typeof item.seriesName === 'string' ? item.seriesName : ''
+              const channel = channelValues.find((s) => s.name === seriesName)
+              const isDigital = channel?.type === 'digital'
+
               const yValue = Array.isArray(item.data) ? item.data[1] : item.data
-              return `<span style="display:inline-block;margin-right:6px;width:8px;height:8px;border-radius:50%;background:${item.color};"></span>${item.seriesName}: ${yValue}`
+              // 对模拟量保留3位小数，对开关量直接显示0或1
+              const formatY = typeof yValue === 'number' && !isDigital ? yValue.toFixed(3) : yValue
+              const rmsValue = channel ? computeCycleRms(channel, hoverIndex) : '-'
+
+              const rmsPart = isDigital
+                ? ''
+                : `<span style="display:inline-block;min-width:110px;">有效值=${rmsValue}</span>`
+              return `<span style="display:inline-block;margin-right:6px;width:8px;height:8px;border-radius:50%;background:${item.color};"></span><span style="display:inline-block;min-width:150px;">${seriesName}:</span><span style="display:inline-block;min-width:130px;">瞬时值=${formatY}</span>${rmsPart}`
             })
             .join('<br/>')
         )
