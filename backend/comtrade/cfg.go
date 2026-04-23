@@ -243,7 +243,8 @@ func parseAnalogChannelLine(parser *cfgParser, line string) error {
 	}
 	ch.Skew, err = strconv.ParseFloat(parts[7], 64)
 	if err != nil {
-		return fmt.Errorf("invalid Analog Skew: %s", parts[7])
+		fmt.Printf("invalid Analog Skew: %s", parts[7])
+		ch.Skew = 0.0 // default to 0.0 if invalid
 	}
 	ch.MinValue, err = strconv.ParseFloat(parts[8], 64)
 	if err != nil {

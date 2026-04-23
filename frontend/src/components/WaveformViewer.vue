@@ -539,7 +539,7 @@ function renderChart() {
       },
       // 鼠标悬停时显示所有通道的瞬时值和RMS，且按照channelValues中的顺序显示
       formatter: function (params) {
-        // 根据channelValues中的顺序排序显示
+        // 根据channelValues中的顺序排序
         const sortedParams = Array.isArray(params)
           ? params.slice().sort((a, b) => {
               const seriesA = channelValues.findIndex((s) => s.name === a.seriesName)
@@ -586,7 +586,9 @@ function renderChart() {
               const rmsPart = isDigital
                 ? ''
                 : `<span style="display:inline-block;min-width:110px;">有效值=${rmsValue}</span>`
-              return `<span style="display:inline-block;margin-right:6px;width:8px;height:8px;border-radius:50%;background:${item.color};"></span><span style="display:inline-block;min-width:150px;">${seriesName}:</span><span style="display:inline-block;min-width:130px;">瞬时值=${formatY}</span>${rmsPart}`
+              return `<span style="display:inline-block;margin-right:6px;width:8px;height:8px;border-radius:50%;background:${item.color};"></span>
+                      <span style="display:inline-block;min-width:150px;">${seriesName}:</span>
+                      <span style="display:inline-block;min-width:130px;">瞬时值=${formatY}</span>${rmsPart}`
             })
             .join('<br/>')
         )
